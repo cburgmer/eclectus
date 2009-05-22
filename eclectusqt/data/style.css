@@ -1,0 +1,534 @@
+/* General style settings */
+
+html {
+    overflow-y: scroll; /* always show vertical scrollbar, from CSS3 */
+}
+
+a
+{
+    text-decoration: none;
+}
+
+table
+{
+    border-spacing:0px;
+}
+
+ol, ul
+{
+    margin: 0px;
+    padding-left: 2em;
+}
+
+li
+{
+    margin: 0px;
+    padding: 0px;
+}
+
+h2
+{
+    margin-bottom: 0.2em;
+    font-size: 1.2em;
+}
+
+th, td
+{
+    vertical-align: top;
+}
+
+/* Adapted style settings */
+
+body.dictionary
+{
+    /* Default content page displayed by dictionarypage */
+}
+
+body.error
+{
+    /* Error page displayed by dictionarypage */
+}
+
+body.help
+{
+    /* Help page displayed by dictionarypage */
+    font-size: 110%;
+}
+
+body.wordaday
+{
+    /* One-word-a-day page displayed by dictionarypage */
+}
+
+table.meaning
+{
+}
+
+table.containedVocabulary
+{
+    width: 100%;
+}
+
+table.vocabulary
+{
+    width: 100%;
+}
+
+table.fullVocabulary
+{
+    width: 100%;
+}
+
+table.search
+{
+    width: 100%;
+}
+
+table.otherVocabulary
+{
+    width: 100%;
+}
+
+table.similarVocabulary
+{
+    width: 100%;
+}
+
+/* Individual elements */
+
+.meaningEntry
+{
+    /* vocabulary entry for character/word page, missing the character colum */
+}
+
+.meaningEntry .reading
+{
+    color: #660;
+    min-width: 5pc;
+}
+
+.meaningEntry .translation
+{
+}
+
+.vocabularyEntry
+{
+    /* full vocabulary entry */
+}
+
+tr.vocabularyEntry:nth-child(odd)
+{
+    background-color:#fff;
+}
+
+tr.vocabularyEntry:nth-child(even)
+{
+    background-color:#f7f7f7;
+}
+
+.vocabularyEntry .character
+{
+    font-size: 14pt;
+    padding-right: 5px;
+}
+
+.vocabularyEntry .reading
+{
+    color: #660;
+    padding-right: 5px;
+}
+
+.vocabularyEntry .translation
+{
+}
+
+.variantSection
+{
+    /* Section providing variant information on dictionary page "see variant" */
+    line-height: 0px;
+}
+
+span.headword > a:link, span.headwordMini > a:link
+{
+    color: #000;
+}
+
+span.headword
+{
+    font-size: 36pt;
+}
+
+span.headwordMini
+{
+    font-size: 24pt;
+}
+
+span.character
+{
+    font-size: 14pt;
+}
+
+span.reading
+{
+    color: #660;
+/*     font-style: italic; */
+}
+
+span.meta
+{
+    /* Meta information, e.g. "no entries found" */
+    font-style: italic;
+}
+
+a.character
+{
+}
+
+a.reading
+{
+    color: #660;
+}
+
+a.meta
+{
+    /* Meta information for providing links to other content,
+       e.g. "all entries" */
+    margin-top: 0.15em;
+}
+
+a.audio
+{
+    /* Textual link for pronunciation file. */
+    font-size: xx-small;
+    color: #660;
+    vertical-align:super;
+}
+
+a.addVocabulary
+{
+    content: url("addvocab.png");
+    width: 18;
+    margin-left: 5px;
+    margin-right: 5px;
+}
+
+.translation a.addVocabulary
+{
+    float: right;
+}
+
+a.crossLink
+{
+    /* Links to web pages */
+}
+
+span.readingEntity
+{
+    /* encapsulates one single reading entity */
+    white-space: nowrap;
+}
+
+span.blockOfFor
+{
+    /* encapsulates one single reading entity */
+    white-space: nowrap;
+    display: inline-block;
+}
+
+.character span.blockOfFor
+{
+    min-width: 58pt;
+}
+
+.reading span.blockOfFor
+{
+    min-width: 7pc;
+}
+
+body.help object
+{
+    float: right;
+    height: 240px;
+    width: 221px;
+}
+
+body.wordaday object
+{
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    height: 260px;
+    width: 258px;
+}
+
+/* Stroke order */
+
+.strokeorder
+{
+    right: 2px;
+    top: 2px;
+    width: 110px;
+    margin-bottom: 8px;
+/*     clear: both; */
+    float: right;
+    outline-color: #aaa;
+    outline-width: 1px;
+    outline-style: solid;
+}
+
+span.strokeorder
+{
+    /* for stroke order fonts the font-family is injected from the source code*/
+    font-size: 110px;
+    text-align: center;
+    vertical-align: middle;
+    line-height: 110px;
+}
+
+.order_gif img
+{
+    max-width: 110px;
+}
+
+.red_png img
+{
+    max-width: 110px;
+}
+
+.bw_png img
+{
+    max-width: 300px;
+    max-height: 50px;
+}
+
+span.bigstrokeorder
+{
+    max-width: 100%;
+}
+
+span.bigstrokeorder > img.charactersegments
+{
+    height: 60px;
+}
+
+/* Alternative headword display */
+
+.alternativeHeadword * a:link
+{
+    color: #000;
+}
+
+.alternativeHeadword * > span.character
+{
+    font-size: 40px;
+    outline-color: #aaa;
+    outline-width: 1px;
+    outline-style: solid;
+}
+
+.alternativeHeadword * > span.word
+{
+    font-size: 25px;
+    border-width: 0px;
+    outline-color: #aaa;
+    outline-width: 1px;
+    outline-style: solid;
+}
+
+.alternativeHeadword > li
+{
+    display: inline-block;
+    margin-bottom: 6px;
+    border-width: 1px;
+}
+
+.alternativeHeadword
+{
+/*    counter-reset: alternativeHW;*/
+    padding-left: 5px;
+    clear: right;
+    float: right;
+    text-align: right;
+    width: 110px;
+}
+
+.alternativeHeadwordIndex
+{
+    font-size: 9pt;
+    display: inline-block;
+    width: 12px;
+    text-align: left;
+    word-spacing: -0.3em;
+    margin-left: 3px;
+    vertical-align: top;
+}
+
+/* Character decomposition */
+
+div.tree
+{
+}
+
+div.tree * entry
+{
+}
+
+div.tree * .translation
+{
+    font-size: 80%;
+}
+
+/* Taken from the Nornix TreeMenu (http://treemenu.nornix.com/) "Default" Skin
+   by Kemie Guaida, http://www.monolinea.com/ */
+
+.tree
+{
+        padding: 0 0 5px 0.75em;
+        position: relative;
+}
+
+/* clean up defaults */
+.tree ul, .tree li, .tree span.entry
+{
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        list-style: none outside none;
+}
+.tree li
+{
+        background-image: none !important;
+}
+.tree ul
+{
+        margin-left: 8px !important;
+        position: relative;
+}
+
+/* common <li> settings */
+.tree li
+{
+        position: relative !important;
+        border-left: 1px solid #bbbbbb !important;
+        padding-left: 12px !important;
+        background: url(decomposition-tree-line.png) 0 10px no-repeat !important;
+}
+
+/* get the line right on the last item (when no class is set) */
+.tree ul li:last-child
+{
+        border-left: none !important;
+        padding-left: 13px !important; /* compensate the 1px border */
+        background: url(decomposition-tree-corner.png) 0 0 no-repeat !important;
+}
+
+/* same as above, but with a class set */
+.tree ul li.last
+{
+        border-left: none !important;
+        padding-left: 13px !important; /* compensate the 1px border */
+        background: url(decomposition-tree-corner.png) 0 0 no-repeat !important;
+}
+
+/* display marker on current item */
+.tree span.current span
+{
+        display: block !important;
+        position: absolute !important;
+        left: 22px !important;
+        top: 3px !important;
+        height: 13px !important;
+        width: 14px !important;
+}
+
+/* set default values for <a> elements */
+.tree li span.entry, .tree span.root, .tree li span.current
+{
+        display: block !important;
+        padding-left: 14px !important;
+        min-height: 18px !important;
+        border: none !important;
+        color: #000000 !important;
+        background-position: 2px 2px !important;
+}
+
+/* Radical and Component table */
+
+table.component
+{
+}
+
+table.radical
+{
+}
+
+table.searchResult
+{
+}
+
+table.radical * td.radicalIndex:before
+{
+    content: "#";
+    font-size: 6pt;
+    vertical-align: top;
+}
+
+table.radical * tr.radicalEntry:hover
+{
+    cursor: hand;
+    background-color: #6094CF;
+}
+
+table.component * .component:hover
+{
+    background-color: #6094CF;
+}
+
+table.radical * td.radicalIndex
+{
+    text-align: right;
+    padding-top: 3px;
+    padding-right: 3px;
+}
+
+table.radical * td.radical
+{
+    padding-right: 3px;
+}
+
+table.radical * td.translation
+{
+    text-align: left;
+    font-size: 70%;
+}
+
+tr.strokeCount
+{
+    /* Stroke count entry */
+}
+
+tr.radicalEntry
+{
+    /* Radical entry */
+}
+
+th.strokeCount
+{
+    /* Additional stroke count in radical result page */
+}
+
+span.radical, span.component, span.radicalVariant
+{
+    color: #000;
+    font-size: 16pt;
+}
+
+.selectedComponent, .selectedRadicalEntry
+{
+    background-color: #6094CF;
+}
+
+span.zeroResultComponent
+{
+    color: #999;
+}

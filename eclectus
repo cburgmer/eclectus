@@ -1,0 +1,65 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+u"""
+Eclectus is a small Han character dictionary.
+
+To do:
+  See TODO file.
+
+Features:
+  * Supports EDICT and CEDICT style dictionaries,
+  * currently supports Japanese, Mandarin Chinese (traditional and simplified),
+    Cantonese and Korean,
+  * works without a background dictionary (though limited),
+  * supported romanisations/character readings: Kana, Pinyin, Wade-Giles,
+    Gwoyeu Romatzyh, IPA, Jyutping, Cantonese Yale, Hangul,
+  * modular support for adding further character readings,
+  * fuzzy search (wildcards), mixing of characers and pronunciation,
+  * integrated search for headword, pronunciation and translation at the same
+    time,
+  * search for similar pronunciations,
+  * Kangxi radical table,
+  * component (aka multi radical) search,
+  * handwriting recognition,
+  * vocabulary list,
+  * sensitive towards similar characters, writing variants, infrequent readings,
+  * small mode (aka mini mode) with clipboard lookup for integration with other
+    software,
+  * character/word related information, character component tree,
+  * stroke order and pronunciation as audio,
+  * dictionary update function.
+
+Dependencies
+  * Qt4, Cross-Platform GUI and Framework
+  * PyQt4, Python bindings for Qt
+  * KDE4, libraries including kdecore, kdeui, kio
+  * PyKDE4, Python bindings for KDE
+  * cjklib, Han character library
+
+Copyright (C) 2009 Christoph Burgmer
+(cburgmer@ira.uka.de)
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+"""
+
+from eclectusqt import main
+
+__author__ = main.__author__
+__license__ = main.__license__
+__url__ = main.__url__
+__version__ = main.__version__
+
+if __name__ == '__main__':
+    main.run()

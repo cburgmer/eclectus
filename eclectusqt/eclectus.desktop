@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Eclectus
+Comment=Han character dictionary
+Comment[de]=Wörterbuch für chinesische Schriftzeichen
+GenericName=Han character Dictionary
+GenericName[de]=Wörterbuch für chinesische Schriftzeichen
+TryExec=eclectus
+Exec=eclectus
+Icon=eclectus
+MimeType=
+Categories=Education;Dictionary;Languages;KDE;

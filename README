@@ -1,0 +1,57 @@
+Eclectus is a small Han character dictionary especially designed for
+learners of Chinese character based languages like Mandarin Chinese or
+Japanese.
+
+Features
+--------
+  * Supports EDICT and CEDICT style dictionaries,
+  * currently supports Japanese, Mandarin Chinese (traditional and
+    simplified), Cantonese and Korean,
+  * works without a background dictionary (though limited),
+  * supported romanisations/character readings: Kana, Pinyin, Wade-Giles,
+    Gwoyeu Romatzyh, IPA, Jyutping, Cantonese Yale, Hangul,
+  * modular support for adding further character readings,
+  * fuzzy search (wildcards), mixing of characers and pronunciation,
+  * integrated search for headword, pronunciation and translation at the
+    same time,
+  * search for similar pronunciations,
+  * Kangxi radical table,
+  * component (aka multi radical) search,
+  * handwriting recognition,
+  * vocabulary list,
+  * sensitive towards similar characters, writing variants, infrequent
+    readings,
+  * small mode (aka mini mode) with clipboard lookup for integration with
+    other software,
+  * character/word related information, character component tree,
+  * stroke order and pronunciation as audio,
+  * dictionary update function.
+
+Dependencies
+------------
+  * Python
+  * SQLalchemy, SQL library
+  * Qt4, Cross-Platform GUI and Framework
+  * PyQt4, Python bindings for Qt
+  * KDE4, libraries including kdecore, kdeui, kio
+  * PyKDE4, Python bindings for KDE
+  * cjklib, Han character library
+
+Installing
+----------
+Once downloaded/extracted Eclectus can be installed on the system by running:
+
+# python setup.py install
+
+This step isn't needed when installing from a binary package (.deb, .rpm).
+It is possible to run Eclectus from the source directory.
+
+Make sure the user running Eclectus has write access to the database. Otherwise
+run the following as root:
+
+# ./libeclectus/buildtables.py -b base
+
+Contributing
+------------
+If you are interested in contributing to Eclectus or have any comments, please
+contact <cburgmer@ira.uka.de>.

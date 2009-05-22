@@ -1,0 +1,140 @@
+<ui version="4.0" >
+ <class>Form</class>
+ <widget class="QWidget" name="Form" >
+  <property name="geometry" >
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>270</width>
+    <height>469</height>
+   </rect>
+  </property>
+  <property name="windowTitle" >
+   <string>Form</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout" >
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_3" >
+     <item>
+      <widget class="QToolButton" name="clearButton" >
+       <property name="toolTip" >
+        <string>Clear the drawing area</string>
+       </property>
+       <property name="whatsThis" >
+        <string>Clear the drawing area</string>
+       </property>
+       <property name="text" >
+        <string/>
+       </property>
+       <property name="checkable" >
+        <bool>false</bool>
+       </property>
+       <property name="checked" >
+        <bool>false</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QToolButton" name="backButton" >
+       <property name="toolTip" >
+        <string>Remove the last stroke</string>
+       </property>
+       <property name="whatsThis" >
+        <string>Remove the last stroke</string>
+       </property>
+       <property name="text" >
+        <string/>
+       </property>
+       <property name="checkable" >
+        <bool>false</bool>
+       </property>
+       <property name="checked" >
+        <bool>false</bool>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="horizontalSpacer" >
+       <property name="orientation" >
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0" >
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <widget class="QSplitter" name="handwritingSplitter" >
+     <property name="frameShape" >
+      <enum>QFrame::NoFrame</enum>
+     </property>
+     <property name="frameShadow" >
+      <enum>QFrame::Plain</enum>
+     </property>
+     <property name="orientation" >
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="childrenCollapsible" >
+      <bool>false</bool>
+     </property>
+     <widget class="TomoeHandwritingWidget" native="1" name="handwritingView" >
+      <property name="contextMenuPolicy" >
+       <enum>Qt::NoContextMenu</enum>
+      </property>
+      <property name="toolTip" >
+       <string>Draw the character using one line per stroke observing stroke order and relative placement.</string>
+      </property>
+      <property name="whatsThis" >
+       <string>Draw the character using one line per stroke observing stroke order and relative placement.</string>
+      </property>
+     </widget>
+     <widget class="QWebView" name="handwritingResultView" >
+      <property name="minimumSize" >
+       <size>
+        <width>0</width>
+        <height>45</height>
+       </size>
+      </property>
+      <property name="maximumSize" >
+       <size>
+        <width>16777215</width>
+        <height>80</height>
+       </size>
+      </property>
+      <property name="baseSize" >
+       <size>
+        <width>0</width>
+        <height>0</height>
+       </size>
+      </property>
+      <property name="contextMenuPolicy" >
+       <enum>Qt::NoContextMenu</enum>
+      </property>
+      <property name="url" >
+       <url>
+        <string>about:blank</string>
+       </url>
+      </property>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>QWebView</class>
+   <extends>QWidget</extends>
+   <header>QtWebKit/QWebView</header>
+  </customwidget>
+  <customwidget>
+   <class>TomoeHandwritingWidget</class>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>

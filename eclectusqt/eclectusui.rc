@@ -1,0 +1,46 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE kpartgui SYSTEM 'kpartgui.dtd'>
+<gui version="0.1" name="Eclectus" >
+ <MenuBar>
+  <Menu name="file" >
+   <Action name="updatedictionaries" />
+  </Menu>
+  <!--  <Menu name="edit" >
+   <Action name="edit_copy_as_html" />
+  </Menu> -->
+  <Menu name="go" >
+   <Action name="history" />
+   <Action name="lookupselection" />
+   <Action name="lookupclipboard" />
+  </Menu>
+  <Menu name="settings" >
+   <Action name="showtoolbox" />
+   <Action name="autolookup" />
+   <Action name="minimode" />
+   <!--   <Separator name="separator_2" />-->
+   <Action name="sectionchooser" />
+   <Separator name="separator_0" />
+   <Action name="dictchooser" />
+   <Action name="readingchooser" />
+   <Separator name="separator_3" />
+   <Action name="optimisedatabase" />
+  </Menu>
+  <Menu name="help" >
+   <Action name="helppage" />
+  </Menu>
+ </MenuBar>
+ <ToolBar iconText="icontextright" noMerge="1" name="mainToolBar" >
+  <text>Main Toolbar</text>
+  <Action name="go_back" />
+  <Action name="go_forward" />
+  <Separator name="separator_1" />
+  <Action name="autolookup" />
+  <ActionList name="dynamicActionlist" />
+ </ToolBar>
+ <ToolBar iconText="icontextright" fullWidth="true" name="searchToolbar" >
+  <text>Search Toolbar</text>
+  <Action name="searchbar" />
+  <Action name="go_search" />
+ </ToolBar>
+ <ActionProperties/>
+</gui>

@@ -1,0 +1,16 @@
+9a10,20
+> class MyQListView(QtGui.QListView):
+>     # TODO can not catch those keys with a shortcut, why?
+>     def keyPressEvent(self, event):
+>         if event.key() == QtCore.Qt.Key_Delete:
+>             self.emit(QtCore.SIGNAL("deletePressed()"))
+>         elif event.key() == QtCore.Qt.Key_Return \
+>             or event.key() == QtCore.Qt.Key_Enter:
+>             self.emit(QtCore.SIGNAL("returnPressed()"))
+>         else:
+>             QtGui.QListView.keyPressEvent(self, event)
+> 
+28c39
+<         self.vocabularyListView = QtGui.QListView(Form)
+---
+>         self.vocabularyListView = MyQListView(Form)

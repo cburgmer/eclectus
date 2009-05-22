@@ -1,0 +1,11 @@
+--- HandwritingPage.ui.orig	2009-02-11 16:28:49.000000000 +0800
++++ HandwritingPage.ui	2009-02-11 16:28:54.000000000 +0800
+@@ -159,6 +159,8 @@
+   </customwidget>
+   <customwidget>
+    <class>TomoeHandwritingWidget</class>
++   <extends>QGraphicsView</extends>
++   <header>tomoeqt.tomoewidget</header>
+   </customwidget>
+  </customwidgets>
+  <resources/>
