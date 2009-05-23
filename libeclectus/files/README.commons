@@ -1,0 +1,17 @@
+The commons stroke order images are taken from
+http://commons.wikimedia.org/wiki/Commons:Stroke_Order_Project and released
+under the GNU Free Documentation License as well as the Creative Commons
+Attribution 3.0 Unported (http://creativecommons.org/licenses/by/3.0/). See
+COPYING for details.
+
+The images can be downloaded via script downloadstrokeorder.sh. The
+segmentation of bw.png images is done via segmenttiles.py. Files
+bw.png.segmentations, jbw.png.segmentations and tbw.png.segmentations include
+segmentation information used by segmenttiles.py.
+
+Those were generate by applying command (similar for jbw.png and tbw.png)
+$ python segmenttiles.py --segmentation=whitespace --equaltiles
+  --tilesize=120x110 --test bw.png/?-bw.png > bw.png.segmentations
+
+The actual write process can be started by
+$ python segmenttiles.py --readfrom=bw.png.segmentations -v bw.png/?-bw.png
