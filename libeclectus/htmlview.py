@@ -84,18 +84,20 @@ class HtmlView:
         self.showAlternativeHeadwords = showAlternativeHeadwords
         self.useExtraReadingInformation = useExtraReadingInformation
 
-        if strokeOrderType and strokeOrderType in self.getStrokeOrderTypes():
+        availableStrokeOrder = self.getAvailableStrokeOrderTypes()
+        if strokeOrderType and strokeOrderType in availableStrokeOrder:
             self.strokeOrderType = strokeOrderType
         else:
-            available = self.getAvailableStrokeOrderTypes()
             # don't show BIG_STROKE_ORDER_TYPE twice
-            if self.BIG_STROKE_ORDER_TYPE in available:
-                del available[available.index(self.BIG_STROKE_ORDER_TYPE)]
+            if self.BIG_STROKE_ORDER_TYPE in availableStrokeOrder:
+                index = availableStrokeOrder.index(self.BIG_STROKE_ORDER_TYPE)
+                del availableStrokeOrder[index]
             if self.BIG_STROKE_ORDER_TYPE.replace('.segment', '') in available:
-                del available[available.index(
-                    self.BIG_STROKE_ORDER_TYPE.replace('.segment', ''))]
-            if available:
-                self.strokeOrderType = available[0]
+                index = availableStrokeOrder.index(
+                    self.BIG_STROKE_ORDER_TYPE.replace('.segment', ''))
+                del availableStrokeOrder[index]
+            if availableStrokeOrder:
+                self.strokeOrderType = availableStrokeOrder[0]
             else:
                 self.strokeOrderType = None
 

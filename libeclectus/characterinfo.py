@@ -158,6 +158,8 @@ class CharacterInfo:
         self.db = DatabaseConnector.getDBConnector()
         #self.db.engine.echo = True
 
+        self.availableDictionaries = None
+
         if language and language in self.LANGUAGE_CHAR_LOCALE_MAPPING:
             self.language = language
         else:
@@ -179,8 +181,6 @@ class CharacterInfo:
                             break
 
         self.locale = self.LANGUAGE_CHAR_LOCALE_MAPPING[self.language]
-
-        self.availableDictionaries = None
 
         # get incompatible reading conversions
         self.incompatibleConversions = {}

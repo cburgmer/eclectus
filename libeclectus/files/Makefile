@@ -9,33 +9,33 @@ bw.png:
 	cd commons.tmp && python ../../scripts/downcommons.py "Tbw.png stroke order images"
 	cd commons.tmp && python ../../scripts/downcommons.py "Jbw.png stroke order images"
 	mkdir -p tbw.png
-	mv commons.tmp/?-tbw.png tbw.png
+	mv commons.tmp/*-tbw.png tbw.png
 	mkdir -p jbw.png
-	mv commons.tmp/?-jbw.png jbw.png
+	mv commons.tmp/*-jbw.png jbw.png
 	mkdir -p bw.png
-	mv commons.tmp/?-bw.png bw.png
+	mv commons.tmp/*-bw.png bw.png
 
 bw.png.segment: bw.png
-	python ../scripts/segmenttiles.py --readfrom=../data/tbw.png.segmentations -v tbw.png/?-tbw.png
+	python ../scripts/segmenttiles.py --readfrom=../data/tbw.png.segmentations -v tbw.png/*-tbw.png
 	mkdir -p tbw.png.segment
-	mv tbw.png/?-tbw.*.png tbw.png.segment
-	python ../scripts/segmenttiles.py --readfrom=../data/jbw.png.segmentations -v jbw.png/?-jbw.png
+	mv tbw.png/*-tbw.*.png tbw.png.segment
+	python ../scripts/segmenttiles.py --readfrom=../data/jbw.png.segmentations -v jbw.png/*-jbw.png
 	mkdir -p jbw.png.segment
-	mv jbw.png/?-jbw.*.png jbw.png.segment
-	python ../scripts/segmenttiles.py --readfrom=../data/bw.png.segmentations -v bw.png/?-bw.png
+	mv jbw.png/*-jbw.*.png jbw.png.segment
+	python ../scripts/segmenttiles.py --readfrom=../data/bw.png.segmentations -v bw.png/*-bw.png
 	mkdir -p bw.png.segment
-	mv bw.png/?-bw.*.png bw.png.segment
+	mv bw.png/*-bw.*.png bw.png.segment
 
 red.png:
 	cd commons.tmp && python ../../scripts/downcommons.py "Red.png stroke order images"
 	cd commons.tmp && python ../../scripts/downcommons.py "Jred.png stroke order images"
 #	cd commons.tmp && python ../../scripts/downcommons.py "Tred.png stroke order images"
 #	mkdir -p tred.png
-#	mv commons.tmp/?-tred.png tred.png
+#	mv commons.tmp/*-tred.png tred.png
 	mkdir -p jred.png
-	mv commons.tmp/?-jred.png jred.png
+	mv commons.tmp/*-jred.png jred.png
 	mkdir -p red.png
-	mv commons.tmp/?-red.png red.png
+	mv commons.tmp/*-red.png red.png
 
 order.gif:
 	mkdir -p commons.tmp
@@ -43,11 +43,11 @@ order.gif:
 	cd commons.tmp && python ../../scripts/downcommons.py "Jorder.gif stroke order images"
 	cd commons.tmp && python ../../scripts/downcommons.py "Torder.gif stroke order images"
 	mkdir -p torder.gif
-	mv commons.tmp/?-torder.gif torder.gif
+	mv commons.tmp/*-torder.gif torder.gif
 	mkdir -p jorder.gif
-	mv commons.tmp/?-jorder.gif jorder.gif
+	mv commons.tmp/*-jorder.gif jorder.gif
 	mkdir -p order.gif
-	mv commons.tmp/?-order.gif order.gif
+	mv commons.tmp/*-order.gif order.gif
 
 commons: bw.png bw.png.segment red.png order.gif
 
@@ -57,7 +57,6 @@ install:
 ifneq "$(wildcard chi-balm-hsk1_ogg )" ""
 	mkdir -p /usr/share/eclectus/chi-balm-hsk1_ogg
 	mkdir -p /usr/share/doc/eclectus/
-	ln -s /usr/share/doc/eclectus /usr/share/doc/eclectus-data-chi-balm-hsk1
 	cp COPYING.chi-balm-hsk1_ogg /usr/share/doc/eclectus/
 	cp -R chi-balm-hsk1_ogg/* /usr/share/eclectus/chi-balm-hsk1_ogg
 	mv /usr/share/eclectus/chi-balm-hsk1_ogg/README /usr/share/doc/eclectus/README.chi-balm-hsk1_ogg
@@ -65,7 +64,6 @@ ifneq "$(wildcard chi-balm-hsk1_ogg )" ""
 endif
 ifneq "$(wildcard bw.png.segment )" ""
 	mkdir -p /usr/share/eclectus/commons
-	ln -s /usr/share/doc/eclectus /usr/share/doc/eclectus-data-commons-bw-png-segment
 	cp COPYING.commons /usr/share/doc/eclectus/
 	cp README.commons /usr/share/doc/eclectus/
 	cp -R bw.png.segment /usr/share/eclectus/commons/
@@ -74,7 +72,6 @@ ifneq "$(wildcard bw.png.segment )" ""
 endif
 ifneq "$(wildcard bw.png )" ""
 	mkdir -p /usr/share/eclectus/commons
-	ln -s /usr/share/doc/eclectus /usr/share/doc/eclectus-data-commons-bw-png-segment
 	cp COPYING.commons /usr/share/doc/eclectus/
 	cp README.commons /usr/share/doc/eclectus/
 	cp -R bw.png /usr/share/eclectus/commons/
@@ -83,7 +80,6 @@ ifneq "$(wildcard bw.png )" ""
 endif
 ifneq "$(wildcard red.png )" ""
 	mkdir -p /usr/share/eclectus/commons
-	ln -s /usr/share/doc/eclectus /usr/share/doc/eclectus-data-commons-bw-png-segment
 	cp COPYING.commons /usr/share/doc/eclectus/
 	cp README.commons /usr/share/doc/eclectus/
 	cp -R red.png /usr/share/eclectus/commons/
@@ -92,7 +88,6 @@ ifneq "$(wildcard red.png )" ""
 endif
 ifneq "$(wildcard order.gif )" ""
 	mkdir -p /usr/share/eclectus/commons
-	ln -s /usr/share/doc/eclectus /usr/share/doc/eclectus-data-commons-bw-png-segment
 	cp COPYING.commons /usr/share/doc/eclectus/
 	cp README.commons /usr/share/doc/eclectus/
 	cp -R order.gif /usr/share/eclectus/commons/
