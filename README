@@ -51,6 +51,20 @@ run the following as root:
 
 # ./libeclectus/buildtables.py -b base
 
+To install optional data used by Eclectus run
+# cd libeclectus/files
+# make chi-balm-hsk1_ogg
+# make bw.png.segment
+If you haven't installed the Kanji stroke order font or you prefer another
+source you can choose between
+# make red.png
+or
+# make order.gif
+
+If you installed Eclectus using the first step you also need to install
+these files:
+# sudo make install
+
 Contributing
 ------------
 If you are interested in contributing to Eclectus or have any comments, please

@@ -33,6 +33,7 @@ red.png:
 #	mkdir -p tred.png
 #	mv commons.tmp/?-tred.png tred.png
 	mkdir -p jred.png
+	mv commons.tmp/?-jred.png jred.png
 	mkdir -p red.png
 	mv commons.tmp/?-red.png red.png
 
@@ -52,6 +53,54 @@ commons: bw.png bw.png.segment red.png order.gif
 
 all: commons chi-balm-hsk1_ogg
 
+install:
+ifneq "$(wildcard chi-balm-hsk1_ogg )" ""
+	mkdir -p /usr/share/eclectus/chi-balm-hsk1_ogg
+	mkdir -p /usr/share/doc/eclectus/
+	ln -s /usr/share/doc/eclectus /usr/share/doc/eclectus-data-chi-balm-hsk1
+	cp COPYING.chi-balm-hsk1_ogg /usr/share/doc/eclectus/
+	cp -R chi-balm-hsk1_ogg/* /usr/share/eclectus/chi-balm-hsk1_ogg
+	mv /usr/share/eclectus/chi-balm-hsk1_ogg/README /usr/share/doc/eclectus/README.chi-balm-hsk1_ogg
+	mv /usr/share/eclectus/chi-balm-hsk1_ogg/README.swac /usr/share/doc/eclectus/
+endif
+ifneq "$(wildcard bw.png.segment )" ""
+	mkdir -p /usr/share/eclectus/commons
+	ln -s /usr/share/doc/eclectus /usr/share/doc/eclectus-data-commons-bw-png-segment
+	cp COPYING.commons /usr/share/doc/eclectus/
+	cp README.commons /usr/share/doc/eclectus/
+	cp -R bw.png.segment /usr/share/eclectus/commons/
+	cp -R jbw.png.segment /usr/share/eclectus/commons/
+	cp -R tbw.png.segment /usr/share/eclectus/commons/
+endif
+ifneq "$(wildcard bw.png )" ""
+	mkdir -p /usr/share/eclectus/commons
+	ln -s /usr/share/doc/eclectus /usr/share/doc/eclectus-data-commons-bw-png-segment
+	cp COPYING.commons /usr/share/doc/eclectus/
+	cp README.commons /usr/share/doc/eclectus/
+	cp -R bw.png /usr/share/eclectus/commons/
+	cp -R jbw.png /usr/share/eclectus/commons/
+	cp -R tbw.png /usr/share/eclectus/commons/
+endif
+ifneq "$(wildcard red.png )" ""
+	mkdir -p /usr/share/eclectus/commons
+	ln -s /usr/share/doc/eclectus /usr/share/doc/eclectus-data-commons-bw-png-segment
+	cp COPYING.commons /usr/share/doc/eclectus/
+	cp README.commons /usr/share/doc/eclectus/
+	cp -R red.png /usr/share/eclectus/commons/
+	cp -R jred.png /usr/share/eclectus/commons/
+#	cp -R tred.png /usr/share/eclectus/commons/
+endif
+ifneq "$(wildcard order.gif )" ""
+	mkdir -p /usr/share/eclectus/commons
+	ln -s /usr/share/doc/eclectus /usr/share/doc/eclectus-data-commons-bw-png-segment
+	cp COPYING.commons /usr/share/doc/eclectus/
+	cp README.commons /usr/share/doc/eclectus/
+	cp -R order.gif /usr/share/eclectus/commons/
+	cp -R jorder.gif /usr/share/eclectus/commons/
+	cp -R torder.gif /usr/share/eclectus/commons/
+endif
+
+.PHONY: clean cleanTmp cleanSegmentTmp
 clean: cleanTmp
 	rm -rf chi-balm-hsk1_ogg
 	rm -rf bw.png jbw.png tbw.png

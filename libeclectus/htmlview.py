@@ -91,6 +91,9 @@ class HtmlView:
             # don't show BIG_STROKE_ORDER_TYPE twice
             if self.BIG_STROKE_ORDER_TYPE in available:
                 del available[available.index(self.BIG_STROKE_ORDER_TYPE)]
+            if self.BIG_STROKE_ORDER_TYPE.replace('.segment', '') in available:
+                del available[available.index(
+                    self.BIG_STROKE_ORDER_TYPE.replace('.segment', ''))]
             if available:
                 self.strokeOrderType = available[0]
             else:
