@@ -92,10 +92,11 @@ class HtmlView:
             if self.BIG_STROKE_ORDER_TYPE in availableStrokeOrder:
                 index = availableStrokeOrder.index(self.BIG_STROKE_ORDER_TYPE)
                 del availableStrokeOrder[index]
-            if self.BIG_STROKE_ORDER_TYPE.replace('.segment', '') in available:
-                index = availableStrokeOrder.index(
-                    self.BIG_STROKE_ORDER_TYPE.replace('.segment', ''))
+            originalType = self.BIG_STROKE_ORDER_TYPE.replace('.segment', '')
+            if originalType in availableStrokeOrder:
+                index = availableStrokeOrder.index(originalType)
                 del availableStrokeOrder[index]
+
             if availableStrokeOrder:
                 self.strokeOrderType = availableStrokeOrder[0]
             else:

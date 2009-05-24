@@ -291,7 +291,7 @@ class WeightedEDICTFormatBuilder(build.EDICTFormatBuilder):
             self.data = data
             self.index = -1
 
-        def generator(self):
+        def __iter__(self):
             line = self.readline()
             while line:
                 yield line
@@ -362,8 +362,7 @@ class WeightedEDICTFormatBuilder(build.EDICTFormatBuilder):
                 self.insertVersion(version)
                 break
 
-        return WeightedEDICTFormatBuilder.PrependGenerator(readLines, handle)\
-            .generator()
+        return WeightedEDICTFormatBuilder.PrependGenerator(readLines, handle)
 
     def getWeight(self, weightDict, keys, entry):
         """
