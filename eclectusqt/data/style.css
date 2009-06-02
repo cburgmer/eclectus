@@ -145,7 +145,7 @@ tr.vocabularyEntry:nth-child(even)
 .variantSection
 {
     /* Section providing variant information on dictionary page "see variant" */
-    line-height: 0px;
+    line-height: 2px;
 }
 
 span.headword > a:link, span.headwordMini > a:link

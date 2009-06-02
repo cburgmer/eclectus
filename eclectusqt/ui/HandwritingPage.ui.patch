@@ -3,9 +3,9 @@
 @@ -159,6 +159,8 @@
    </customwidget>
    <customwidget>
-    <class>TomoeHandwritingWidget</class>
+    <class>HandwritingWidget</class>
 +   <extends>QGraphicsView</extends>
-+   <header>tomoeqt.tomoewidget</header>
++   <header>tomoeqt.handwritingwidget</header>
    </customwidget>
   </customwidgets>
   <resources/>

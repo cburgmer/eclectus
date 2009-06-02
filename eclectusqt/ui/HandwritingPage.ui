@@ -82,7 +82,7 @@
      <property name="childrenCollapsible" >
       <bool>false</bool>
      </property>
-     <widget class="TomoeHandwritingWidget" native="1" name="handwritingView" >
+     <widget class="HandwritingWidget" native="1" name="handwritingView" >
       <property name="contextMenuPolicy" >
        <enum>Qt::NoContextMenu</enum>
       </property>
@@ -132,7 +132,7 @@
    <header>QtWebKit/QWebView</header>
   </customwidget>
   <customwidget>
-   <class>TomoeHandwritingWidget</class>
+   <class>HandwritingWidget</class>
   </customwidget>
  </customwidgets>
  <resources/>

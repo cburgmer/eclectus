@@ -1,8 +1,8 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 """
-Qt widget integrating Tomoe handwriting character recognition for Japanese Kanji
-and Chinese Hanzi.
+Qt widget integrating Tegaki/Tomoe handwriting character recognition for
+Japanese Kanji and Chinese Hanzi.
 
 Includes a QApplication demonstrating the wiget.
 
@@ -12,6 +12,7 @@ History:
     * 11.02.2009, show boundaries and keep handwriting within them, resizeable.
     * 12.02.2009, dictionary setting method, stroke count, maximum size,
                   graceful import failure
+    * 02.06.2009, ported to also work with Tegaki
 
 Released under the LGPL (http://www.gnu.org/licenses/lgpl.html).
 """
@@ -23,25 +24,32 @@ import signal
 # imports needed by tomoe widget
 from PyQt4 import QtGui, QtCore
 try:
-    import tomoe
-    hasTomoe = True
+    from tegaki.recognizer import Recognizer
+    from tegaki.character import Writing
+    recognizerType = 'tegaki'
 except ImportError:
-    hasTomoe = False
+    try:
+        from tomoe import Recognizer, Writing, Dict
+        recognizerType = 'tomoe'
+    except ImportError:
+        recognizerType = None
 
-class TomoeHandwritingWidget(QtGui.QGraphicsView):
+
+class HandwritingWidget(QtGui.QGraphicsView):
     """
-    Qt widget integrating Tomoe handwriting character recognition for Japanese
-    Kanji and Chinese Hanzi.
+    Qt widget integrating Tegaki/Tomoe handwriting character recognition for
+    Japanese Kanji and Chinese Hanzi.
 
     Example:
         dictionary = os.path.join("/usr/local/share/tomoe/recognizer/",
             'handwriting-zh_CN.xml')
-        widget = TomoeHandwritingWidget(mainWindow, dictionary, 200, 200)
+        settings = {'tomoe': {'dictionary'; dictionary}}
+        widget = HandwritingWidget(mainWindow, dictionary, 200, 200)
         connect(widget, QtCore.SIGNAL("updated()"), showResults)
     """
     class LineDrawingGraphicsScene(QtGui.QGraphicsScene):
         """Graphics scene for drawing strokes and handling recognizer."""
-        def __init__(self, parent, dictionary=None, size=100):
+        def __init__(self, parent, recognizerSettings={}, size=100):
             QtGui.QGraphicsScene.__init__(self, parent)
 
             self.size = 100
@@ -54,25 +62,55 @@ class TomoeHandwritingWidget(QtGui.QGraphicsView):
             self.currentStrokeItems = []
 
             self.setSize(size)
-            if dictionary:
-                self.setDictionary(dictionary)
+            self.setDictionary(recognizerSettings)
 
-        def setDictionary(self, dictionary):
+        def setDictionary(self, recognizerSettings={}):
             self.clear_strokes()
 
-            if dictionary and hasTomoe:
-                #initialize the default dictionary and a simple recognizer
-                tomoeDict = tomoe.Dict("XML", filename=dictionary)
-                self.recognizer = tomoe.Recognizer('Simple',
+            #initialize the default dictionary and a simple recognizer
+            if recognizerType == 'tomoe' \
+                and 'tomoe' in recognizerSettings \
+                and 'dictionary' in recognizerSettings['tomoe']:
+                tomoeDict = Dict("XML",
+                    filename=recognizerSettings['tomoe']['dictionary'])
+                self.recognizer = Recognizer('Simple',
                     dictionary=tomoeDict)
 
                 # will encapsulate stroke data
-                self.writing = tomoe.Writing()
+                self.writing = Writing()
+            elif recognizerType == 'tegaki':
+                recognizers = Recognizer.get_available_recognizers()
+                if not recognizers:
+                    raise Exception('No recognizer available')
+
+                if 'tegaki' in recognizerSettings \
+                    and 'regognizer' in recognizerSettings['tegaki']:
+                    engine = recognizerSettings['tegaki']['regognizer']
+                    if engine not in recognizers:
+                        raise Exception('recognizer not available')
+                else:
+                    engine = recognizers.keys()[0]
+                recognizer_klass = recognizers[engine]
+                self.recognizer = recognizer_klass()
+
+                if 'tegaki' in recognizerSettings \
+                    and 'model' in recognizerSettings['tegaki']:
+                    model = recognizerSettings['tegaki']['model']
+                    if model not in recognizer_klass.get_available_models():
+                        raise Exception('Model not available')
+                else:
+                    model = recognizer_klass.get_available_models().keys()[0]
+
+                self.recognizer.set_model(model)
+
+                # will encapsulate stroke data
+                self.writing = Writing()
             else:
                 self.writing = None
 
         def enabled(self):
-            return self.writing != None
+            return True
+            # TODO bug return self.writing != None
 
         def setSize(self, size):
             for group in self.strokeItemGroups:
@@ -129,10 +167,21 @@ class TomoeHandwritingWidget(QtGui.QGraphicsView):
         def strokeCount(self):
             return self.writing.get_n_strokes()
 
-        def doSearch(self):
+        def doSearch(self, maxResults=10):
             """Searches for the current stroke input and returns the results."""
             if self.writing and self.writing.get_n_strokes() > 0:
-                return self.recognizer.search(self.writing)
+                if recognizerType == 'tomoe':
+                    res = self.recognizer.search(self.writing)
+
+                    if maxResults != None:
+                        res = res[:min(maxResults, len(res))]
+
+                    return [(r.get_char().get_utf8().decode('utf8'),
+                        r.get_score()) for r in res]
+
+                elif recognizerType == 'tegaki':
+                    return [(c.decode('utf8'), score) for c, score \
+                        in self.recognizer.recognize(self.writing, maxResults)]
             else:
                 return []
 
@@ -177,9 +226,9 @@ class TomoeHandwritingWidget(QtGui.QGraphicsView):
             point.setX(min(max(0, point.x()), self.size))
             point.setY(min(max(0, point.y()), self.size))
 
-    def __init__(self, parent, dictionary=None, size=100):
-        self.scene = TomoeHandwritingWidget.LineDrawingGraphicsScene(parent,
-            None, 200)
+    def __init__(self, parent, recognizerSettings={}, size=100):
+        self.scene = HandwritingWidget.LineDrawingGraphicsScene(parent,
+            recognizerSettings, size)
 
         QtGui.QGraphicsView.__init__(self, self.scene, parent)
         self.setRenderHints(QtGui.QPainter.Antialiasing)
@@ -187,16 +236,16 @@ class TomoeHandwritingWidget(QtGui.QGraphicsView):
         self.connect(self.scene, QtCore.SIGNAL("strokeAdded()"),
             lambda: self.emit(QtCore.SIGNAL("updated()")))
 
-        self.setDictionary(dictionary)
+        self.setInteractive(self.recognizerAvailable())
         self.setMaximumSize(0)
 
     @staticmethod
-    def tomoeAvailable():
-        return hasTomoe
+    def recognizerAvailable():
+        return recognizerType != None
 
-    def setDictionary(self, dictionary):
-        self.scene.setDictionary(dictionary)
-        self.setInteractive(self.tomoeAvailable() and dictionary != None)
+    def setDictionary(self, recognizerSettings):
+        self.scene.setDictionary(recognizerSettings)
+        self.setInteractive(self.recognizerAvailable())
 
     def setMaximumSize(self, size):
         self.maximumSize = size
@@ -206,12 +255,7 @@ class TomoeHandwritingWidget(QtGui.QGraphicsView):
         Returns the results for the current strokes with at maximum maxResults.
         """
         if self.scene.enabled():
-            res = self.scene.doSearch()
-
-            if maxResults:
-                res = res[:min(maxResults, len(res))]
-            return [(r.get_char().get_utf8().decode('utf8'), r.get_score()) \
-                for r in res]
+            return self.scene.doSearch()
 
     def strokeCount(self):
         if self.scene.enabled():
@@ -243,9 +287,11 @@ class MainWindow(QtGui.QMainWindow):
         QtGui.QMainWindow.__init__(self)
 
         # this is all you need to get the widget working
-        dictionary = os.path.join("/usr/local/share/tomoe/recognizer/",
+        tomoeDictionary = os.path.join("/usr/local/share/tomoe/recognizer/",
             'handwriting-zh_CN.xml')
-        self.widget = TomoeHandwritingWidget(self, dictionary, 200)
+        recognizerSettings = {'tomoe': {'dictionary': tomoeDictionary},
+            'tegaki': {}}
+        self.widget = HandwritingWidget(self, recognizerSettings, 200)
         self.connect(self.widget, QtCore.SIGNAL("updated()"), self.showResults)
 
         # add some nice layout and buttons to clear strokes

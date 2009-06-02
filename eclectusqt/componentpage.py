@@ -4,6 +4,9 @@
 Component chooser plugin for accessing characters by searching for their
 components.
 
+@todo Fix: Component view has buggy updates, lesser characters are highlighted than
+    actually chosen
+
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
 as published by the Free Software Foundation; either version 2
@@ -145,6 +148,7 @@ class ComponentPage(QWidget, ComponentPageUI.Ui_Form):
             if char in self.selectedComponents:
                 self.selectedComponents.remove(char)
             else:
+                # TODO sort components, to optimize caching
                 self.selectedComponents.append(char)
 
         self.componentEdit.setText(''.join(self.selectedComponents))
@@ -156,6 +160,7 @@ class ComponentPage(QWidget, ComponentPageUI.Ui_Form):
             self.clearOldSearchJobs()
 
             # preliminary save until the worker thread updates it
+            # TODO sort components, to optimize caching
             self.selectedComponents = components
 
             if self.selectedComponents:
@@ -236,6 +241,7 @@ class ComponentPage(QWidget, ComponentPageUI.Ui_Form):
                 + '</html>')
             self.componentResultLabel.setText(i18n("%1 Results:", count))
         elif method == 'preferRadicalFormForCharacter':
+            # TODO sort components, to optimize caching
             self.selectedComponents = content[:]
             self.componentEdit.setText(''.join(self.selectedComponents))
             self.updateComponentView()

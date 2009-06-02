@@ -1,7 +1,8 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 """
-Handwriting chooser plugin using the Tomoe handwriting recognition engine.
+Handwriting chooser plugin using the Tegaki/Tomoe handwriting recognition
+engine.
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -38,6 +39,21 @@ tomoeDictionaryPath = "/usr/local/share/tomoe/recognizer/"
 class HandwritingPage(QWidget, HandwritingPageUI.Ui_Form):
     DEFAULT_MAXIMUM_FIELD_SIZE = 200
     DEFAULT_MAXIMUM_RESULTS = 20
+
+    WRITING_MODELS = {
+        'ja': {'tomoe': {'dictionary': os.path.join(tomoeDictionaryPath,
+            'handwriting-ja.xml')}},
+        'zh-Hans': {'tomoe': {'dictionary': os.path.join(tomoeDictionaryPath,
+            'handwriting-zh_CN.xml')},
+            'tegaki': {'recognizer': 'zinnia', 'model': 'Simplified Chinese'}},
+        'zh': {'fallback': {'language': 'zh-Hans'}},
+        'zh-cmn-Hans': {'fallback': {'language': 'zh-Hans'}},
+        'zh-cmn-Hant': {'fallback': {'language': 'zh-Hans', 'noisy': True}},
+        'zh-Hant': {'fallback': {'language': 'zh-Hans', 'noisy': True}},
+        'zh-yue': {'fallback': {'language': 'zh-Hans', 'noisy': True}},
+        'zh-yue-Hans': {'fallback': {'language': 'zh-Hans'}},
+        'zh-yue-Hant': {'fallback': {'language': 'zh-Hans', 'noisy': True}},
+        }
 
     def __init__(self, mainWindow, renderThread, pluginConfig=None):
         QWidget.__init__(self, mainWindow)
@@ -91,8 +107,9 @@ class HandwritingPage(QWidget, HandwritingPageUI.Ui_Form):
         if not self.initialised:
             self.initialised = True
 
-            if not self.handwritingView.tomoeAvailable():
-                self.handwritingResultView.setHtml(i18n('Tomoe not installed.'))
+            if not self.handwritingView.recognizerAvailable():
+                self.handwritingResultView.setHtml(
+                    i18n('No recognizer installed.'))
                 self.handwritingResultView.setEnabled(False)
                 self.handwritingView.setEnabled(False)
                 self.clearButton.setEnabled(False)
@@ -131,21 +148,23 @@ class HandwritingPage(QWidget, HandwritingPageUI.Ui_Form):
             or self.currentLanguage != charInfo.language:
             self.currentLanguage = charInfo.language
 
-            if self.currentLanguage.startswith('ja'):
-                # Japanese locale
-                dictionaryFile = 'handwriting-ja.xml'
+            if self.currentLanguage in self.WRITING_MODELS:
+                settings = self.WRITING_MODELS[self.currentLanguage]
             else:
-                if not self.currentLanguage in ['zh', 'zh-Hans', 'zh-cmn-Hans',
-                    'zh-cmn']:
-                    print "Tomoe: No stroke data for locale " \
-                        + self.currentLanguage
+                # choose random language
+                fallbackLanguage = sorted(self.WRITING_MODELS.keys())[0]
+                settings = {'fallback': {'language': fallbackLanguage},
+                    'noisy': True}
+
+            if 'fallback' in settings:
+                if 'noisy' in settings['fallback'] \
+                    and settings['fallback']['noisy']:
                     self.handwritingResultView.setHtml(
                         i18n('Sorry, no stroke data currently exists for this locale, falling back to simplified Chinese.'))
                     errorDisplayed = True
-                # all other locales might work best with simplified Chinese
-                dictionaryFile = 'handwriting-zh_CN.xml'
-            self.handwritingView.setDictionary(os.path.join(tomoeDictionaryPath,
-                dictionaryFile))
+                settings = self.WRITING_MODELS[settings['fallback']['language']]
+
+            self.handwritingView.setDictionary(settings)
 
             if not errorDisplayed:
                 self.handwritingResultView.setHtml(
@@ -161,7 +180,7 @@ class HandwritingPage(QWidget, HandwritingPageUI.Ui_Form):
             # TODO weired Tomoe response
             weiredRes = [char for char, _ in resultList if len(char) != 1]
             if weiredRes:
-                print "Warning: illegal return from Tomoe: ", repr(weiredRes)
+                print "Warning: illegal return from recognizer: ", repr(weiredRes)
                 chars = [char for char in chars if len(char) == 1]
 
             # render page
