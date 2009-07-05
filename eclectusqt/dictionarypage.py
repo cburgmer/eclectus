@@ -900,9 +900,7 @@ function _go() { }
         Simple function for telling if a non Chinese character is present.
         """
         for char in string:
-            # CJK RADICAL REPEAT, Kana, Hangul
-            if char < u'⺀' or ((char >= u'ぁ') and (char <= u'ヿ')) \
-                or ((char >= u'가') and (char <= u'힣')):
+            if characterinfo.CharacterInfo.getCJKScriptClass(char) != 'Han':
                 return True
         return False
 

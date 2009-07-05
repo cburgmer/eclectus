@@ -107,6 +107,8 @@ class MainWindow(KXmlGuiWindow):
         language = unicode(DictionaryConfig.readEntry("Language", None))
         reading = unicode(DictionaryConfig.readEntry("Transcription", None))
         dictionary = unicode(DictionaryConfig.readEntry("Dictionary", None))
+        charDomain = unicode(DictionaryConfig.readEntry("Character Domain",
+            None))
         htmlViewSettings = htmlview.HtmlView.readSettings(
             dict([(unicode(key), unicode(value)) \
                 for key, value in DictionaryConfig.entryMap().items()]))
@@ -117,7 +119,7 @@ class MainWindow(KXmlGuiWindow):
         self.renderThread.start()
 
         self.renderThread.setCachedObject(characterinfo.CharacterInfo, language,
-            reading, dictionary)
+            reading, dictionary, charDomain)
         charInfo = self.renderThread.getObjectInstance(
             characterinfo.CharacterInfo)
         self.renderThread.setCachedObject(htmlview.HtmlView, charInfo,
@@ -309,6 +311,18 @@ class MainWindow(KXmlGuiWindow):
         self.connect(self.readingChooserAction,
             SIGNAL("triggered(const QString)"), self.transcriptionChanged)
 
+        # character domain chooser
+        self.charDomainChooserAction = KSelectAction(i18n("&Character domain"),
+            self)
+        self.charDomainChooserAction.setWhatsThis(
+            i18n("Select the character domain to narrow search results"))
+        self.actionCollection().addAction("chardomainchooser",
+            self.charDomainChooserAction)
+        self.updateCharDomainSelector()
+
+        self.connect(self.charDomainChooserAction,
+            SIGNAL("triggered(const QString)"), self.charDomainChanged)
+
     def restoreWindowState(self):
         # get saved settings
         lastReadings = [unicode(s) for s in \
@@ -327,7 +341,7 @@ class MainWindow(KXmlGuiWindow):
         self.autoLookup = GeneralConfig.readEntry(
             "Auto-Lookup clipboard", str(False)) != "False"
         self.autoLookupAction.setChecked(self.autoLookup)
-        self.onlyAutoLookupChineseCharacters = GeneralConfig.readEntry(
+        self.onlyAutoLookupCJKCharacters = GeneralConfig.readEntry(
             "Auto-Lookup only Chinese characters", str(False)) != "False"
 
         self.splitterFrame.restoreState(QByteArray.fromBase64(
@@ -394,7 +408,7 @@ class MainWindow(KXmlGuiWindow):
 
         GeneralConfig.writeEntry("Auto-Lookup clipboard", str(self.autoLookup))
         GeneralConfig.writeEntry("Auto-Lookup only Chinese characters",
-            str(self.onlyAutoLookupChineseCharacters))
+            str(self.onlyAutoLookupCJKCharacters))
 
         # toolbox
         if self.characterChooser.isVisible():
@@ -415,6 +429,8 @@ class MainWindow(KXmlGuiWindow):
         DictionaryConfig.writeEntry("Language", charInfo.language)
         DictionaryConfig.writeEntry("Transcription", charInfo.reading)
         DictionaryConfig.writeEntry("Dictionary", charInfo.dictionary)
+        DictionaryConfig.writeEntry("Character Domain",
+            charInfo.characterDomain)
 
         htmlView = self.renderThread.getObjectInstance(htmlview.HtmlView)
         for key, value in htmlView.settings().items():
@@ -545,10 +561,19 @@ class MainWindow(KXmlGuiWindow):
         self.readingNameLookup = dict([(name, reading) for reading, name \
             in self.READING_NAMES.items()])
 
-    def _reloadObjects(self, language, reading, dictionary):
+    def updateCharDomainSelector(self):
+        # update readings
+        charInfo = self.renderThread.getObjectInstance(
+            characterinfo.CharacterInfo)
+        charDomains = charInfo.getAvailableCharacterDomains()
+        self.charDomainChooserAction.setItems(charDomains)
+        currentIndex = charDomains.index(charInfo.characterDomain)
+        self.charDomainChooserAction.setCurrentItem(currentIndex)
+
+    def _reloadObjects(self, language, reading, dictionary, charDomain):
         """Reload objects hold by render thread."""
         self.renderThread.setCachedObject(characterinfo.CharacterInfo, language,
-            reading, dictionary)
+            reading, dictionary, charDomain)
 
         charInfo = self.renderThread.getObjectInstance(
             characterinfo.CharacterInfo)
@@ -568,7 +593,11 @@ class MainWindow(KXmlGuiWindow):
         else:
             reading = None
 
-        _, reading, _ = self._reloadObjects(language, reading, dictionary)
+        charInfo = self.renderThread.getObjectInstance(
+            characterinfo.CharacterInfo)
+        charDomain = charInfo.characterDomain
+        _, reading, _ = self._reloadObjects(language, reading, dictionary,
+            charDomain)
 
         if reading:
             self.LAST_READING[(language, dictionary)] = reading
@@ -582,9 +611,20 @@ class MainWindow(KXmlGuiWindow):
 
         language = charInfo.language
         dictionary = charInfo.dictionary
-        _, reading, _ = self._reloadObjects(language, reading, dictionary)
+        charDomain = charInfo.characterDomain
+        _, reading, _ = self._reloadObjects(language, reading, dictionary,
+            charDomain)
 
         self.LAST_READING[(language, dictionary)] = reading
+
+    def charDomainChanged(self, charDomain):
+        charInfo = self.renderThread.getObjectInstance(
+            characterinfo.CharacterInfo)
+
+        language = charInfo.language
+        reading = charInfo.reading
+        dictionary = charInfo.dictionary
+        self._reloadObjects(language, reading, dictionary, unicode(charDomain))
 
     def slotCharacterComboActivated(self, inputString):
         self.characterCombo.addToHistory(inputString)
@@ -607,10 +647,10 @@ class MainWindow(KXmlGuiWindow):
                     if isinstance(focusWidget, editWidgetCls):
                         return
 
-            if self.onlyAutoLookupChineseCharacters:
+            if self.onlyAutoLookupCJKCharacters:
                 clipboardText = unicode(QApplication.clipboard().text(
                     QClipboard.Selection).simplified()).strip()
-                if not MainWindow.hasChineseCharacter(clipboardText):
+                if not MainWindow.hasCJKCharacter(clipboardText):
                     return
 
             self.lookupClipboardAction.trigger()
@@ -618,13 +658,13 @@ class MainWindow(KXmlGuiWindow):
             self.activateWindow()
 
     @staticmethod
-    def hasChineseCharacter(string):
+    def hasCJKCharacter(string):
         """
-        Simple function for telling if a Chinese character is present.
+        Simple function for telling if a Chinese character or other CJK script
+        is present.
         """
         for char in string:
-            # CJK RADICAL REPEAT
-            if char >= u'⺀':
+            if characterinfo.CharacterInfo.getCJKScriptClass(char) != None:
                 return True
         return False
 
@@ -690,6 +730,10 @@ def run():
     aboutData.addCredit(ki18n("Tomoe developers"),
         ki18n("Tomoe handwriting recognition"),
         'tomoe-devel@lists.sourceforge.net', 'http://tomoe.sourceforge.jp')
+    aboutData.addCredit(ki18n("Mathieu Blondel"),
+        ki18n("Tegaki handwriting recognition"),
+        u'mathieu ÂT mblondel DÔT org'.encode('utf8'),
+        'http://tegaki.sourceforge.net')
     aboutData.addCredit(ki18n("Unicode Consortium and contributors"),
         ki18n("Unihan database"), '', 'http://unicode.org/charts/unihan.html')
     aboutData.addCredit(ki18n("Commons Stroke Order Project"),

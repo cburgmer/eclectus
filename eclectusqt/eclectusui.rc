@@ -22,6 +22,7 @@
    <Separator name="separator_0" />
    <Action name="dictchooser" />
    <Action name="readingchooser" />
+   <Action name="chardomainchooser" />
    <Separator name="separator_3" />
    <Action name="optimisedatabase" />
   </Menu>

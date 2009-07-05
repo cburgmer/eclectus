@@ -183,6 +183,11 @@ class HandwritingPage(QWidget, HandwritingPageUI.Ui_Form):
                 print "Warning: illegal return from recognizer: ", repr(weiredRes)
                 chars = [char for char in chars if len(char) == 1]
 
+            # filter locale specific characters
+            charInfo = self.renderThread.getObjectInstance(
+                characterinfo.CharacterInfo)
+            chars = charInfo.filterDomainCharacters(chars)
+
             # render page
             if chars:
                 charLinks = []

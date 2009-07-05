@@ -146,17 +146,46 @@ class CharacterInfo:
         }
     """Groups of similar sounding syllable finals."""
 
-    def __init__(self, language=None, readingN=None, dictionary=None):
+    UNICODE_SCRIPT_CLASSES = {'Han': [('2E80', '2E99'), ('2E9B', '2EF3'),
+            ('2F00', '2FD5'), '3005', '3007', ('3021', '3029'),
+            ('3038', '303A'), '303B', ('3400', '4DB5'), ('4E00', '9FC3'),
+            ('F900', 'FA2D'), ('FA30', 'FA6A'), ('FA70', 'FAD9'),
+            ('20000', '2A6D6'), ('2F800', '2FA1D')],
+        'Hiragana': [('3041', '3096'), ('309D', '309E'), '309F'],
+        'Katakana': [('30A1', '30FA'), ('30FD', '30FE'), '30FF',
+            ('31F0', '31FF'), ('32D0', '32FE'), ('3300', '3357'),
+            ('FF66', 'FF6F'), ('FF71', 'FF9D')],
+        'Hangul': [('1100', '1159'), ('115F', '11A2'), ('11A8', '11F9'),
+            ('3131', '318E'), ('3200', '321E'), ('3260', '327E'),
+            ('AC00', 'D7A3'), ('FFA0', 'FFBE'), ('FFC2', 'FFC7'),
+            ('FFCA', 'FFCF'), ('FFD2', 'FFD7'), ('FFDA', 'FFDC')],
+        'Bopomofo': [('3105', '312D'), ('31A0', '31B7')],
+    }
+    """
+    Mapping of CJK scripts to Unicode character ranges taken from
+    U{http://www.unicode.org/Public/5.1.0/ucd/Scripts.txt}.
+
+    Tuples are ranges C{from} C{to} and single entries reprsent single
+    characters.
+    """
+
+    def __init__(self, language=None, readingN=None, dictionary=None,
+                characterDomain=None):
         """
         Initialises the CharacterInfo object.
 
         @type locale: character
         @param locale: I{character locale} (one out of TCJKV)
+        @todo Impl: Test if character domain exists before applying
         """
-        self.characterLookup = characterlookup.CharacterLookup()
-        self.readingFactory = reading.ReadingFactory()
-        self.db = DatabaseConnector.getDBConnector()
         #self.db.engine.echo = True
+
+        self.db = DatabaseConnector.getDBConnector()
+
+        if characterDomain:
+            self.characterDomain = characterDomain # TODO Test if character domain exists before applying
+        else:
+            self.characterDomain = 'Unicode'
 
         self.availableDictionaries = None
 
@@ -181,6 +210,12 @@ class CharacterInfo:
                             break
 
         self.locale = self.LANGUAGE_CHAR_LOCALE_MAPPING[self.language]
+
+        self.characterLookup = characterlookup.CharacterLookup(self.locale,
+            self.characterDomain)
+        self.characterLookupTraditional = characterlookup.CharacterLookup('T',
+            self.characterDomain)
+        self.readingFactory = reading.ReadingFactory()
 
         # get incompatible reading conversions
         self.incompatibleConversions = {}
@@ -267,6 +302,30 @@ class CharacterInfo:
                     availReading, pronReading):
                     self.pronunciationLookup[availReading] \
                         = self.pronunciationLookup[pronReading]
+
+    @classmethod
+    def getCJKScriptClass(cls, char):
+        """
+        Returns the character's CJK-script, C{None} if not known or not a CJK
+        script.
+        """
+        if not hasattr(cls, '_codepointRangeDict'):
+            cls._codepointRangeDict = {}
+            for scriptClass, ranges in cls.UNICODE_SCRIPT_CLASSES.items():
+                for charRange in ranges:
+                    if type(charRange) == type(()):
+                        rangeFrom, rangeTo = charRange
+                    else:
+                        rangeFrom, rangeTo = (charRange, charRange)
+                    cls._codepointRangeDict[(int(rangeFrom, 16),
+                        int(rangeTo, 16))] = scriptClass
+
+        for charRange, scriptClass in cls._codepointRangeDict.items():
+            rangeFrom, rangeTo = charRange
+            if rangeFrom <= ord(char) and ord(char) <= rangeTo:
+                return scriptClass
+        else:
+            return None
 
     #{ Settings
 
@@ -361,6 +420,9 @@ class CharacterInfo:
 
         compatible.sort()
         return compatible
+
+    def getAvailableCharacterDomains(self):
+        return self.characterLookup.getAvailableCharacterDomains()
 
     def getUpdateVersions(self, tableNames):
         if tableNames and self.db.engine.has_table('UpdateVersion'):
@@ -875,12 +937,12 @@ class CharacterInfo:
                 if includeEquivalentRadicalForms:
                     # if includeRadicalVariants is set get all forms
                     componentEquivalents.update(self.characterLookup\
-                        .getKangxiRadicalRepresentativeCharacters(
-                            radicalIdx, self.locale))
+                        .getKangxiRadicalRepresentativeCharacters(radicalIdx))
                     if self.locale != 'T':
-                        componentEquivalents.update(self.characterLookup\
-                            .getKangxiRadicalRepresentativeCharacters(
-                                radicalIdx, 'T'))
+                        componentEquivalents.update(
+                            self.characterLookupTraditional\
+                                .getKangxiRadicalRepresentativeCharacters(
+                                    radicalIdx))
                 else:
                     if self.characterLookup.isRadicalChar(component):
                         if component \
@@ -888,14 +950,13 @@ class CharacterInfo:
                             try:
                                 componentEquivalents.add(self.characterLookup\
                                     .getRadicalFormEquivalentCharacter(
-                                        component, self.locale))
+                                        component))
                             except cjklib.exception.UnsupportedError:
                                 # pass if no equivalent char existent
                                 pass
                     else:
                         componentEquivalents.update(set(self.characterLookup\
-                            .getCharacterEquivalentRadicalForms(component,
-                                self.locale)) \
+                            .getCharacterEquivalentRadicalForms(component)) \
                                 - self.RADICALS_NON_VISUAL_EQUIVALENCE)
             except ValueError:
                 pass
@@ -920,12 +981,12 @@ class CharacterInfo:
                             if self.characterLookup.isRadicalChar(similarChar):
                                 componentEquivalents.add(self.characterLookup\
                                     .getRadicalFormEquivalentCharacter(
-                                        similarChar, self.locale))
+                                        similarChar))
                             else:
                                 componentEquivalents.update(
                                     self.characterLookup\
                                         .getCharacterEquivalentRadicalForms(
-                                            similarChar, self.locale))
+                                            similarChar))
                         except cjklib.exception.UnsupportedError:
                             pass
                         except ValueError:
@@ -955,6 +1016,21 @@ class CharacterInfo:
             vVariants.extend(
                 self.characterLookup.getCharacterVariants(variant, 'P'))
         return char in vVariants
+
+    def filterDomainCharacters(self, charList):
+        """
+        Filters a given list of characters to only match those in the current
+        character domain.
+
+        @type charList: list of str
+        @param charList: list of characters to filter
+        @rtype: list of str
+        @return: filtered character list
+        """
+        if hasattr(self.characterLookup, 'filterDomainCharacters'):
+            return self.characterLookup.filterDomainCharacters(charList)
+        else:
+            return charList
 
     @staticmethod
     def _crossProduct(singleLists):
@@ -1064,11 +1140,10 @@ class CharacterInfo:
         # radicals
         radicalForms = set()
         representativeCharacters = set(self.characterLookup\
-            .getKangxiRadicalRepresentativeCharacters(radicalIndex,
-                self.locale))
+            .getKangxiRadicalRepresentativeCharacters(radicalIndex))
         if self.locale != 'T':
-            representativeCharacters.update(self.characterLookup\
-                .getKangxiRadicalRepresentativeCharacters(radicalIndex, 'T'))
+            representativeCharacters.update(self.characterLookupTraditional\
+                .getKangxiRadicalRepresentativeCharacters(radicalIndex))
 
         for radicalForm in representativeCharacters:
             if not self.characterLookup.isRadicalChar(radicalForm):
@@ -1140,8 +1215,7 @@ class CharacterInfo:
                         treeElements.append(subChar)
             return curIndex, (layout, char, treeElements)
 
-        treeList = self.characterLookup.getDecompositionTreeList(char,
-            self.locale)
+        treeList = self.characterLookup.getDecompositionTreeList(char)
         if not treeList:
             return None
         else:
@@ -1172,7 +1246,6 @@ class CharacterInfo:
             visual forms will be included in search.
         @rtype: list of tuples
         @return: list of pairs of matching characters and their Z-variants
-        @raise ValueError: if an invalid I{character locale} is specified
         @todo Impl: Once mapping of similar radical forms exist (e.g. 言 and 訁)
             include here.
         """
@@ -1180,7 +1253,7 @@ class CharacterInfo:
             includeEquivalentRadicalForms, includeSimilarCharacters)
 
         characters = self.characterLookup.getCharactersForEquivalentComponents(
-            equivCharTable)
+            equivCharTable, includeAllZVariants=True)
         seenChars = set()
         charList = []
         for char, _ in characters:
@@ -1189,10 +1262,6 @@ class CharacterInfo:
             seenChars.add(char)
 
         return charList
-        # TODO
-        #return [c for c, _ \
-            #in self.characterLookup.getCharactersForEquivalentComponents(
-                #equivCharTable, self.locale)]
 
     def getComponentsWithResults(self, componentList,
         includeEquivalentRadicalForms=False, includeSimilarCharacters=False):
@@ -1218,7 +1287,6 @@ class CharacterInfo:
             visual forms will be included in search.
         @rtype: list of tuples
         @return: list of pairs of matching characters and their Z-variants
-        @raise ValueError: if an invalid I{character locale} is specified
         @todo Impl: Once mapping of similar radical forms exist (e.g. 言 and 訁)
             include here.
         @todo Impl: Integrate a table of actual radical forms so we don't
@@ -1231,7 +1299,6 @@ class CharacterInfo:
 
         # create where clauses
         lookupTable = self.db.tables['ComponentLookup']
-        localeTable = self.db.tables['LocaleCharacterVariant']
         strokeCountTable = self.db.tables['StrokeCount']
 
         joinTables = []         # join over all tables by char and z-Variant
@@ -1316,8 +1383,8 @@ class CharacterInfo:
             radicalForms = self.getRadicalForms()
             for radicalIdx in range(1, 215):
                 mainForm, _, variants = radicalForms[radicalIdx]
-                equiv = self.characterLookup.getRadicalFormEquivalentCharacter(
-                    mainForm, 'T')
+                equiv = self.characterLookupTraditional\
+                    .getRadicalFormEquivalentCharacter(mainForm)
                 self.radicalFormLookup[equiv] = mainForm
                 for variant in variants:
                     # exclude equivalent forms that don't visual resemble and
@@ -1326,8 +1393,7 @@ class CharacterInfo:
                         and variant not in self.RADICALS_NON_VISUAL_EQUIVALENCE:
                         try:
                             equiv = self.characterLookup\
-                                .getRadicalFormEquivalentCharacter(variant,
-                                    self.locale)
+                                .getRadicalFormEquivalentCharacter(variant)
                             if equiv in self.radicalFormLookup:
                                 warnings.warn(
                                     "Warning: overwriting conversion rule: '" \
@@ -1361,16 +1427,15 @@ class CharacterInfo:
             strokeCountDict = dict(self.db.selectRows(select(
                 [table.c.RadicalIndex, table.c.StrokeCount])))
             for radicalIdx in range(1, 215):
-                radicalForm = self.characterLookup.getKangxiRadicalForm(
-                    radicalIdx, 'T')
+                radicalForm = self.characterLookupTraditional\
+                    .getKangxiRadicalForm(radicalIdx)
 
                 variants = self.characterLookup.getKangxiRadicalVariantForms(
-                    radicalIdx, self.locale)
+                    radicalIdx)
 
                 if self.locale != 'T':
                     radicalLocaleForm \
-                        = self.characterLookup.getKangxiRadicalForm(
-                            radicalIdx, self.locale)
+                        = self.characterLookup.getKangxiRadicalForm(radicalIdx)
                     if radicalForm != radicalLocaleForm:
                         variants.insert(0, radicalLocaleForm)
                 self.radicalForms[radicalIdx] = (radicalForm,
@@ -1443,8 +1508,7 @@ class CharacterInfo:
             # group by stroke count
             for radicalIdx in range(1, 215):
                 representativeForms = set(self.characterLookup\
-                    .getKangxiRadicalRepresentativeCharacters(radicalIdx,
-                        self.locale))
+                    .getKangxiRadicalRepresentativeCharacters(radicalIdx))
                 if radicalIdx in radicalNamesDict:
                     representativeForms.update(radicalNamesDict[radicalIdx])
                 self.kangxiRadicalForms[radicalIdx] = (formsDict[radicalIdx],
@@ -1565,7 +1629,7 @@ class CharacterInfo:
         if self.characterLookup.isRadicalChar(char):
             try:
                 equivChar = self.characterLookup\
-                    .getRadicalFormEquivalentCharacter(char, self.locale)
+                    .getRadicalFormEquivalentCharacter(char)
                 variants.add(equivChar)
             except cjklib.exception.UnsupportedError:
                 # pass if no equivalent char existent

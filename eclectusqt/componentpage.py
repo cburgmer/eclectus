@@ -66,6 +66,7 @@ class ComponentPage(QWidget, ComponentPageUI.Ui_Form):
         self.componentViewScroll = 0
         self.selectedComponents = []
         self.currentLanguage = None
+        self.characterDomain = None
 
         # connect to main window
         self.connect(mainWindow, SIGNAL("writeSettings()"),
@@ -274,7 +275,9 @@ class ComponentPage(QWidget, ComponentPageUI.Ui_Form):
             charInfo = self.renderThread.getObjectInstance(
                 characterinfo.CharacterInfo)
             if not self.currentLanguage \
-                or self.currentLanguage != charInfo.language:
+                or self.currentLanguage != charInfo.language \
+                or self.characterDomain != charInfo.characterDomain:
                 self.currentLanguage = charInfo.language
+                self.characterDomain = charInfo.characterDomain
 
                 self.reload()

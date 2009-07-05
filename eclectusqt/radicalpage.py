@@ -88,7 +88,6 @@ for(var i = 0; i < trs.length; i++)
         self.currentRadicalIndex = None
         self.currentSelectedEntry = None
         self.radicalEntryDict = None
-        self.currentLocale = None
 
         # connect to main window
         self.connect(mainWindow, SIGNAL("writeSettings()"),

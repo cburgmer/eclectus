@@ -1314,38 +1314,42 @@ class HtmlView:
         htmlList.append('<h3>%s</h3>' % i18n('Characters'))
 
         # list sorted by residual stroke count
-        htmlList.append('<table class="searchResult">')
-        for strokeCount in sorted(characterGroups[None].keys()):
-            if type(strokeCount) != type(0):
-                # sort out non stroke count groups
-                continue
+        if not characterGroups[None]:
+            htmlList.append('<span class="meta">%s</span>' \
+                % i18n('no results found for the selected character domain'))
+        else:
+            htmlList.append('<table class="searchResult">')
+            for strokeCount in sorted(characterGroups[None].keys()):
+                if type(strokeCount) != type(0):
+                    # sort out non stroke count groups
+                    continue
 
-            htmlList.append('<tr>' \
-                + '<th class="strokeCount">+%s</th><td>' % strokeCount)
-            charLinks = []
-            for char in sorted(characterGroups[None][strokeCount]):
-                charLinks.append('<span class="character">' \
-                    + '<a class="character" href="#lookup(%s)">%s</a>' \
-                        % (util.encodeBase64(char), char) \
-                    + '</span>')
-            htmlList.append(' '.join(charLinks))
+                htmlList.append('<tr>' \
+                    + '<th class="strokeCount">+%s</th><td>' % strokeCount)
+                charLinks = []
+                for char in sorted(characterGroups[None][strokeCount]):
+                    charLinks.append('<span class="character">' \
+                        + '<a class="character" href="#lookup(%s)">%s</a>' \
+                            % (util.encodeBase64(char), char) \
+                        + '</span>')
+                htmlList.append(' '.join(charLinks))
 
-            htmlList.append('</td></tr>')
+                htmlList.append('</td></tr>')
 
-        # Add characters without stroke count information
-        if None in characterGroups[None]:
-            htmlList.append('<tr>' \
-                + '<th class="strokeCount">%s</th><td>' % i18n('Unknown'))
-            charLinks = []
-            for char in sorted(characterGroups[None][None]):
-                charLinks.append('<span class="character">' \
-                    + '<a class="character" href="#lookup(%s)">%s</a>' \
-                        % (util.encodeBase64(char), char) \
-                    + '</span>')
-            htmlList.append(' '.join(charLinks))
+            # Add characters without stroke count information
+            if None in characterGroups[None]:
+                htmlList.append('<tr>' \
+                    + '<th class="strokeCount">%s</th><td>' % i18n('Unknown'))
+                charLinks = []
+                for char in sorted(characterGroups[None][None]):
+                    charLinks.append('<span class="character">' \
+                        + '<a class="character" href="#lookup(%s)">%s</a>' \
+                            % (util.encodeBase64(char), char) \
+                        + '</span>')
+                htmlList.append(' '.join(charLinks))
 
-            htmlList.append('</td></tr>')
+                htmlList.append('</td></tr>')
 
-        htmlList.append('</table>')
+            htmlList.append('</table>')
 
         return "\n".join(htmlList)

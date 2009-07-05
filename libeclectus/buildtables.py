@@ -40,10 +40,6 @@ from cjklib.reading import ReadingFactory
 from cjklib import build
 from cjklib import exception
 
-DEFAULT_DATA_PATH = ['.']
-buildModulePath = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_DATA_PATH.append(os.path.join(buildModulePath, 'data'))
-
 BUILD_GROUPS = {
     # source based
     'data': ['SimilarCharacters', 'HSKVocabulary',
@@ -558,7 +554,7 @@ class HanDeDictRadicalTableBuilder(build.EntryGeneratorBuilder):
             @type dbConnectInst: object
             @param dbConnectInst: instance of a L{DatabaseConnector}.
             """
-            self.cjk = characterlookup.CharacterLookup(
+            self.cjk = characterlookup.CharacterLookup('T',
                 dbConnectInst=dbConnectInst)
             self.meaningRegex = re.compile(
                 '/Radikal Nr\. \d+(?: = ((?:\([^\)]*\)|[^\(\)\/])+))')
@@ -570,8 +566,8 @@ class HanDeDictRadicalTableBuilder(build.EntryGeneratorBuilder):
             """Provides all data of one character per entry."""
             table = self.cjk.db.tables['HanDeDict']
             for radicalIdx in range(1, 215):
-                form = self.cjk.getKangxiRadicalForm(radicalIdx, 'T')
-                char = self.cjk.getRadicalFormEquivalentCharacter(form, 'T')
+                form = self.cjk.getKangxiRadicalForm(radicalIdx)
+                char = self.cjk.getRadicalFormEquivalentCharacter(form)
                 dictEntries = self.cjk.db.selectRows(
                     select([table.c.Reading, table.c.Translation],
                         or_(table.c.HeadwordTraditional == char,
@@ -617,15 +613,15 @@ class KanjidicEnRadicalTableBuilder(build.EntryGeneratorBuilder):
             @type dbConnectInst: object
             @param dbConnectInst: instance of a L{DatabaseConnector}.
             """
-            self.cjk = characterlookup.CharacterLookup(
+            self.cjk = characterlookup.CharacterLookup('T',
                 dbConnectInst=dbConnectInst)
             self.meaningRegex = re.compile('/([^/]+) \(no\. \d+\)')
 
         def generator(self):
             """Provides all data of one character per entry."""
             for radicalIdx in range(1, 215):
-                form = self.cjk.getKangxiRadicalForm(radicalIdx, 'T')
-                char = self.cjk.getRadicalFormEquivalentCharacter(form, 'T')
+                form = self.cjk.getKangxiRadicalForm(radicalIdx)
+                char = self.cjk.getRadicalFormEquivalentCharacter(form)
                 dictEntries = self.cjk.db.select('Kanjidic',
                     ['RadicalName',
                         KanjidicEnRadicalTableBuilder.MEANING_SOURCE],
@@ -713,8 +709,11 @@ class KangxiRadicalTableBuilder(build.EntryGeneratorBuilder):
             @type dbConnectInst: object
             @param dbConnectInst: instance of a L{DatabaseConnector}.
             """
-            self.cjk = characterlookup.CharacterLookup(
-                dbConnectInst=dbConnectInst)
+            self.cjkDict = {}
+            for loc in ['T', 'C', 'J', 'K', 'V']:
+                self.cjkDict[loc] = characterlookup.CharacterLookup(loc,
+                    dbConnectInst=dbConnectInst)
+
             self.variantLookup = {}
             for radicalIdx, form, locale in self.KANGXI_VARIANT_FORMS:
                 if radicalIdx not in self.variantLookup:
@@ -724,14 +723,14 @@ class KangxiRadicalTableBuilder(build.EntryGeneratorBuilder):
         def generator(self):
             """Provides all data of one character per entry."""
             for radicalIdx in range(1, 215):
-                radicalForm = self.cjk.getKangxiRadicalForm(radicalIdx, 'T')
+                radicalForm = self.cjkDict['T'].getKangxiRadicalForm(radicalIdx)
                 yield(radicalIdx, radicalForm, 'F', 'TCJKV')
 
                 localeDependantForms = {}
                 # get locale main form
                 for locale in 'CJKV':
-                    radicalLocaleForm = self.cjk.getKangxiRadicalForm(
-                        radicalIdx, locale)
+                    radicalLocaleForm \
+                        = self.cjkDict[locale].getKangxiRadicalForm(radicalIdx)
                     if radicalForm != radicalLocaleForm:
                         if radicalLocaleForm not in localeDependantForms:
                             localeDependantForms[radicalLocaleForm] = []
@@ -793,15 +792,15 @@ class KangxiRadicalStrokeCountBuilder(build.EntryGeneratorBuilder):
             @type dbConnectInst: object
             @param dbConnectInst: instance of a L{DatabaseConnector}.
             """
-            self.cjk = characterlookup.CharacterLookup(
+            self.cjk = characterlookup.CharacterLookup('T',
                 dbConnectInst=dbConnectInst)
 
         def generator(self):
             """Provides all data of one character per entry."""
             for radicalIdx in range(1, 215):
-                radicalForm = self.cjk.getKangxiRadicalForm(radicalIdx, 'T')
+                radicalForm = self.cjk.getKangxiRadicalForm(radicalIdx)
                 try:
-                    strokeCount = self.cjk.getStrokeCount(radicalForm, 'T')
+                    strokeCount = self.cjk.getStrokeCount(radicalForm)
                 except exception.NoInformationError:
                     strokeCount = 0
                 yield(radicalIdx, strokeCount)
@@ -1257,7 +1256,15 @@ def main():
 
     # if no path set, asume default
     if not dataPathList:
-        dataPathList = DEFAULT_DATA_PATH
+        dataPathList = ['.']
+        # Eclectus path
+        buildModulePath = os.path.dirname(os.path.abspath(__file__))
+        dataPathList.append(os.path.join(buildModulePath, 'data'))
+        # cjklib path
+        cjklibBuildModule = __import__("cjklib.build")
+        cjklibBuildModulePath = os.path.dirname(os.path.abspath(
+            cjklibBuildModule.__file__))
+        dataPathList.append(os.path.join(cjklibBuildModulePath, 'data'))
 
     dataPath = []
     for pathEntry in dataPathList:
