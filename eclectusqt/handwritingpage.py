@@ -78,6 +78,8 @@ class HandwritingPage(QWidget, HandwritingPageUI.Ui_Form):
         self.connect(mainWindow, SIGNAL("writeSettings()"),
             self.writeSettings)
 
+        self.connect(self.renderThread, SIGNAL("jobFinished"),
+            self.contentRendered)
         self.connect(self.renderThread, SIGNAL("objectCreated"),
             self.objectCreated)
 
@@ -138,37 +140,41 @@ class HandwritingPage(QWidget, HandwritingPageUI.Ui_Form):
 
     def objectCreated(self, id, classObject):
         if classObject == characterinfo.CharacterInfo:
-            self._setDictionary()
+            charInfo = self.renderThread.getObjectInstance(
+                characterinfo.CharacterInfo)
+            if not self.currentLanguage \
+                or self.currentLanguage != charInfo.language:
+                self._setDictionary()
+            else:
+                self._setResultView()
 
     def _setDictionary(self):
         errorDisplayed = False
         charInfo = self.renderThread.getObjectInstance(
             characterinfo.CharacterInfo)
-        if not self.currentLanguage \
-            or self.currentLanguage != charInfo.language:
-            self.currentLanguage = charInfo.language
+        self.currentLanguage = charInfo.language
 
-            if self.currentLanguage in self.WRITING_MODELS:
-                settings = self.WRITING_MODELS[self.currentLanguage]
-            else:
-                # choose random language
-                fallbackLanguage = sorted(self.WRITING_MODELS.keys())[0]
-                settings = {'fallback': {'language': fallbackLanguage},
-                    'noisy': True}
+        if self.currentLanguage in self.WRITING_MODELS:
+            settings = self.WRITING_MODELS[self.currentLanguage]
+        else:
+            # choose random language
+            fallbackLanguage = sorted(self.WRITING_MODELS.keys())[0]
+            settings = {'fallback': {'language': fallbackLanguage},
+                'noisy': True}
 
-            if 'fallback' in settings:
-                if 'noisy' in settings['fallback'] \
-                    and settings['fallback']['noisy']:
-                    self.handwritingResultView.setHtml(
-                        i18n('Sorry, no stroke data currently exists for this locale, falling back to simplified Chinese.'))
-                    errorDisplayed = True
-                settings = self.WRITING_MODELS[settings['fallback']['language']]
-
-            self.handwritingView.setDictionary(settings)
-
-            if not errorDisplayed:
+        if 'fallback' in settings:
+            if 'noisy' in settings['fallback'] \
+                and settings['fallback']['noisy']:
                 self.handwritingResultView.setHtml(
-                    i18n('Draw a character above'))
+                    i18n('Sorry, no stroke data currently exists for this locale, falling back to simplified Chinese.'))
+                errorDisplayed = True
+            settings = self.WRITING_MODELS[settings['fallback']['language']]
+
+        self.handwritingView.setDictionary(settings)
+
+        if not errorDisplayed:
+            self.handwritingResultView.setHtml(
+                i18n('Draw a character above'))
 
     def _setResultView(self):
         if not self.handwritingView.strokeCount():
@@ -183,26 +189,30 @@ class HandwritingPage(QWidget, HandwritingPageUI.Ui_Form):
                 print "Warning: illegal return from recognizer: ", repr(weiredRes)
                 chars = [char for char in chars if len(char) == 1]
 
-            # filter locale specific characters
-            charInfo = self.renderThread.getObjectInstance(
-                characterinfo.CharacterInfo)
-            chars = charInfo.filterDomainCharacters(chars)
+            self.renderThread.enqueue(characterinfo.CharacterInfo,
+                'filterDomainCharacters', chars)
 
-            # render page
-            if chars:
-                charLinks = []
-                for char in chars:
-                    charLinks.append(
-                        '<a class="character" href="#lookup(%s)">%s</a>' \
-                            % (util.encodeBase64(char), char))
-                html = ' '.join(charLinks)
-            else:
-                html = '<p class="meta">%s</p>' % unicode(i18n('No results'))
+    def contentRendered(self, id, classObject, method, args, param, content):
+        if classObject == characterinfo.CharacterInfo:
+            if method == 'filterDomainCharacters':
+                chars = content
 
-            self.handwritingResultView.setHtml(
-                '<html><head><title>Results</title>' \
-                + '<link rel="StyleSheet" href="file://%s" type="text/css" />' \
-                    % util.getData('style.css')
-                + '</head>' \
-                + '<body><span class="character">%s</span></body>' % html \
-                + '</html>')
+                # render page
+                if chars:
+                    charLinks = []
+                    for char in chars:
+                        charLinks.append(
+                            '<a class="character" href="#lookup(%s)">%s</a>' \
+                                % (util.encodeBase64(char), char))
+                    html = ' '.join(charLinks)
+                else:
+                    html = '<p class="meta">%s</p>' % unicode(
+                        i18n('No results for the selected character domain'))
+
+                self.handwritingResultView.setHtml(
+                    '<html><head><title>Results</title>' \
+                    + '<link rel="StyleSheet" href="file://%s" type="text/css" />' \
+                        % util.getData('style.css')
+                    + '</head>' \
+                    + '<body><span class="character">%s</span></body>' % html \
+                    + '</html>')
