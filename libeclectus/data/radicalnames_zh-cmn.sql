@@ -6,5 +6,5 @@ CREATE TABLE RadicalNames_zh_cmn (
   TraditionalShortName VARCHAR(1) NOT NULL, -- Radical short trad. identifier
   SimplifiedShortName VARCHAR(1) NOT NULL,  -- Radical short simp. identifier
   Reading VARCHAR(100) NOT NULL,            -- Radical name reading
-  PRIMARY KEY (TraditionalName)
+  PRIMARY KEY (RadicalIndex, TraditionalName)
 );
