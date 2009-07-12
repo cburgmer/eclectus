@@ -784,7 +784,7 @@ class HtmlView:
             if len(dictResult) > 4:
                 htmlList.append(
                     '<a class="meta" href="#lookup(%s)">%s</a>' \
-                        % (util.encodeBase64(i18n('vocabulary') + ':' \
+                        % (util.encodeBase64(unicode(i18n('vocabulary')) + ':' \
                             + inputString), i18n('All entries...')))
         else:
             htmlList.append('<span class="meta">%s</span>' \

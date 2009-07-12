@@ -325,7 +325,7 @@ class MainWindow(KXmlGuiWindow):
 
     def restoreWindowState(self):
         # get saved settings
-        lastReadings = [unicode(s) for s in \
+        lastReadings = [unicode(s.toString()) for s in \
             DictionaryConfig.readEntry("Last readings", [])]
         self.LAST_READING = {}
         for entry in lastReadings:
@@ -335,8 +335,9 @@ class MainWindow(KXmlGuiWindow):
             self.LAST_READING[(entryLang, entryDict)] = entryReading
 
         # GUI settings
-        self.characterCombo.insertItems(GeneralConfig.readEntry("Url History",
-            []))
+        history = [entry.toString() for entry \
+            in GeneralConfig.readEntry("Url History", [])]
+        self.characterCombo.insertItems(history)
         self.historyLength = int(GeneralConfig.readEntry("History Length", "20"))
         self.autoLookup = GeneralConfig.readEntry(
             "Auto-Lookup clipboard", str(False)) != "False"
