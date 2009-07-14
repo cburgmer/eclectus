@@ -204,6 +204,7 @@ class MainWindow(KXmlGuiWindow):
         self.dictionaryPage.findNextAction(self.actionCollection())
         self.dictionaryPage.findPrevAction(self.actionCollection())
         self.dictionaryPage.copyAction(self.actionCollection())
+        self.dictionaryPage.selectAllAction(self.actionCollection())
         self.dictionaryPage.backwardAction(self.actionCollection())
         self.dictionaryPage.forwardAction(self.actionCollection())
         self.dictionaryPage.helpPageAction(self.actionCollection())

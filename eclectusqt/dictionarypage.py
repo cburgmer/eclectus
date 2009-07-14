@@ -486,6 +486,12 @@ function _go() { }
             self._copyAction)
         return self._copyAction
 
+    def selectAllAction(self, actionCollection):
+        if self._selectAllAction:
+            actionCollection.addAction(self._selectAllAction.objectName(),
+                self._selectAllAction)
+        return self._selectAllAction
+
     def findAction(self, actionCollection):
         actionCollection.addAction(self._findAction.objectName(),
             self._findAction)
