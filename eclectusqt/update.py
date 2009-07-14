@@ -182,8 +182,7 @@ class UpdateDialog(KDialog):
             buildModule = __import__("libeclectus.buildtables")
             buildModulePath = os.path.dirname(os.path.abspath(
                 buildModule.__file__))
-            dbBuild.dataPath.extend(os.path.join(buildModulePath, 'data'))
-
+            dbBuild.dataPath.append(os.path.join(buildModulePath, 'data'))
 
     def _reloadObjects(self):
         self.renderThread.reloadObject(characterinfo.CharacterInfo)
