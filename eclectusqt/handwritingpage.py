@@ -139,6 +139,8 @@ class HandwritingPage(QWidget, HandwritingPageUI.Ui_Form):
                 str(self.maximumResults))
 
     def objectCreated(self, id, classObject):
+        if not self.initialised:
+            return
         if classObject == characterinfo.CharacterInfo:
             charInfo = self.renderThread.getObjectInstance(
                 characterinfo.CharacterInfo)

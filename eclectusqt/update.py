@@ -61,9 +61,6 @@ class UpdateDialog(KDialog):
         self.enableButton(KDialog.Cancel, False)
 
         self.installing = False
-        if not self.databaseHasBase():
-            print >>sys.stderr, i18n("Basic tables missing, will install...")
-            self.installBase()
 
         # TODO can we defer the creationg of the update widget until the dialog is shown?
         self.updateWidget = UpdateWidget(mainWindow, renderThread, pluginConfig)
@@ -168,7 +165,7 @@ class UpdateDialog(KDialog):
             raise Exception('Do not know how to create base tables')
         dbBuild = self.renderThread.getObjectInstance(build.DatabaseBuilder)
         dbBuild.rebuildExisting = False
-        self.currentJob = self.renderThread.enqueueWait(build.DatabaseBuilder,
+        self.currentJob = self.renderThread.enqueue(build.DatabaseBuilder,
             'build', buildtables.BUILD_GROUPS['base'])
 
     def loadDatabaseBuilder(self):
@@ -200,9 +197,12 @@ class UpdateDialog(KDialog):
             QApplication.restoreOverrideCursor()
         elif classObject == build.DatabaseBuilder and method == 'build':
             # reload as content may change due to different database content
+            print "done"
             self._reloadObjects()
             if self.installing:
                 self.installing = False
+                self.emit(SIGNAL("baseTablesInstalled"))
+
         elif classObject == build.DatabaseBuilder and method == 'remove':
             # reload as content may change due to different database content
             self._reloadObjects()
@@ -213,8 +213,7 @@ class UpdateDialog(KDialog):
             if self.installing:
                 print >>sys.stderr, 'fail'
                 print >>sys.stderr, stacktrace
-                self.installing = False
-                raise Exception
+                sys.exit(1)
         elif classObject == build.DatabaseBuilder and method == 'optimize':
             print >>sys.stderr, stacktrace
             QApplication.restoreOverrideCursor()

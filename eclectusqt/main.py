@@ -37,7 +37,7 @@ from PyQt4.QtCore import Qt, SIGNAL, QCoreApplication, QVariant, QString, QSize
 from PyQt4.QtCore import QByteArray, QUrl
 from PyQt4.QtGui import QSizePolicy, QAction, QListWidgetItem, QClipboard
 from PyQt4.QtGui import QMainWindow, QApplication, QIcon, QFont, QImage
-from PyQt4.QtGui import QCursor
+from PyQt4.QtGui import QCursor, QLabel
 
 from PyKDE4 import kdeui
 from PyKDE4.kdecore import ki18n, i18n, KCmdLineArgs, KCmdLineOptions
@@ -102,7 +102,7 @@ class MainWindow(KXmlGuiWindow):
         QMainWindow.__init__(self)
 
         self.miniMode = False
-
+        self.initialised = False
         # start rendering thread
         language = unicode(DictionaryConfig.readEntry("Language", None))
         reading = unicode(DictionaryConfig.readEntry("Transcription", None))
@@ -125,10 +125,6 @@ class MainWindow(KXmlGuiWindow):
         self.renderThread.setCachedObject(htmlview.HtmlView, charInfo,
             **htmlViewSettings)
 
-        # set up UI
-        self.setupUi()
-        self.setupActions()
-
         self.connect(self.renderThread, SIGNAL("objectCreated"),
             self.objectCreated)
         self.connect(self.renderThread, SIGNAL("queueEmpty"),
@@ -138,6 +134,12 @@ class MainWindow(KXmlGuiWindow):
         self.connect(self.renderThread, SIGNAL("jobErrorneous"),
             lambda jobId, classObject, method, args, param, e, stacktrace: \
                 showDebug(stacktrace.decode('utf8')))
+
+        self.updateDialog = update.UpdateDialog(self, self.renderThread)
+
+        # set up UI
+        self.setupUi()
+        self.setupActions()
 
         # finally build gui
         xmlFile = os.path.join(os.getcwd(), 'eclectusqt', 'eclectusui.rc')
@@ -149,6 +151,21 @@ class MainWindow(KXmlGuiWindow):
                 KXmlGuiWindow.Default ^ KXmlGuiWindow.StatusBar))
 
         self.restoreWindowState()
+
+        if self.updateDialog.databaseHasBase():
+            self.finishInit()
+        else:
+            self.connect(self.updateDialog, SIGNAL("baseTablesInstalled"),
+                self.finishInit)
+
+            print >>sys.stderr, i18n("Basic tables missing, will install...")
+            self.updateDialog.installBase()
+
+    def finishInit(self):
+        self.setCentralWidget(self.splitterFrame)
+        self.splitterFrame.setVisible(True)
+
+        self.initialised = True
 
         if GeneralConfig.readEntry("Show installer on startup", 'True') \
             == 'True':
@@ -190,9 +207,8 @@ class MainWindow(KXmlGuiWindow):
 
             self.plugins.append(page)
 
-        self.updateDialog = update.UpdateDialog(self, self.renderThread)
-
-        self.setCentralWidget(self.splitterFrame)
+        self.splitterFrame.setVisible(False)
+        self.setCentralWidget(QLabel(i18n('Installing basic tables...')))
 
     def setupActions(self):
         """Sets up all actions (signal/slot combinations)."""
@@ -683,6 +699,8 @@ class MainWindow(KXmlGuiWindow):
             self.characterChooser.setCurrentIndex(self.vocabularyPlugin)
 
     def objectCreated(self, id, classObject):
+        if not self.initialised:
+            return
         if classObject == characterinfo.CharacterInfo:
             self.updateDictionarySelector()
             self.updateReadingSelector()

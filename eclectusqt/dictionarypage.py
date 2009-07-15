@@ -974,6 +974,8 @@ function _go() { }
                         % (headword, util.encodeBase64(headword)))
 
     def objectCreated(self, id, classObject):
+        if not self.initialised:
+            return
         if classObject == htmlview.HtmlView:
             self.reload()
             # section availability depends on availability of dictionary

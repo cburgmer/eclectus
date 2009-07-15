@@ -1308,7 +1308,7 @@ def main():
         try:
             dbBuilder.build(groups)
 
-            print "finished"
+            print "done"
         except exception.UnsupportedError:
             printFormattedLine("error building local tables, some names " \
                 + "do not exist")

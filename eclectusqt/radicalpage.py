@@ -117,8 +117,6 @@ for(var i = 0; i < trs.length; i++)
 
         self.connect(self.radicalView.page(),
             SIGNAL("linkClicked(const QUrl &)"), self.radicalClicked)
-        self.connect(self.radicalView, SIGNAL("loadFinished(bool)"),
-            self.radicalViewLoaded)
 
         self.gotoNextButton.setEnabled(False)
         self.gotoButton.setEnabled(False)
@@ -130,6 +128,10 @@ for(var i = 0; i < trs.length; i++)
     def showEvent(self, event):
         if not self.initialised:
             self.initialised = True
+
+            self.connect(self.radicalView, SIGNAL("loadFinished(bool)"),
+
+            self.radicalViewLoaded)
             self.gotoNextButton.setIcon(KIcon('go-down-search'))
             self.gotoButton.setIcon(KIcon('go-next'))
             self.toRadicalTableButton.setIcon(KIcon('go-previous'))
@@ -343,6 +345,8 @@ for(var i = 0; i < trs.length; i++)
                     for _, strokeCount, _ in content.values()])
 
     def objectCreated(self, id, classObject):
+        if not self.initialised:
+            return
         if classObject == htmlview.HtmlView:
             if self.radicalView.title() == 'Radicals':
                 self.renderThread.enqueue(htmlview.HtmlView, 'getRadicalTable')

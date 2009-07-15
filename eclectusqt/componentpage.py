@@ -271,6 +271,8 @@ class ComponentPage(QWidget, ComponentPageUI.Ui_Form):
         self.checkForJob(id, 'getComponentSearchTable')
 
     def objectCreated(self, id, classObject):
+        if not self.initialised:
+            return
         if classObject == characterinfo.CharacterInfo:
             charInfo = self.renderThread.getObjectInstance(
                 characterinfo.CharacterInfo)
