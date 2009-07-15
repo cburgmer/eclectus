@@ -36,6 +36,8 @@ from PyKDE4.kio import KIO
 from PyKDE4.kdeui import KIcon, KMessageBox, KStandardGuiItem, KDialog
 from PyKDE4.kdeui import KAction, KActionCollection
 
+from sqlalchemy.exc import OperationalError
+
 try:
     from cjklib import build
 except ImportError:
@@ -212,7 +214,22 @@ class UpdateDialog(KDialog):
         if classObject == build.DatabaseBuilder and method == 'build':
             if self.installing:
                 print >>sys.stderr, 'fail'
-                print >>sys.stderr, stacktrace
+                #print >>sys.stderr, stacktrace
+                if isinstance(e, OperationalError):
+                    try:
+                        dbBuild = self.renderThread.getObjectInstance(
+                            build.DatabaseBuilder)
+                        appendMsg = ''
+                        if dbBuild.db.databaseUrl \
+                            and dbBuild.db.databaseUrl.startswith('sqlite'):
+                            appendMsg = ' _and_ to the underlying directory.'
+                        print >>sys.stderr, \
+                            'Make sure Eclectus has write access ' \
+                                + 'to the database %s' \
+                                    % dbBuild.db.databaseUrl \
+                                + appendMsg
+                    except Exception:
+                        pass
                 sys.exit(1)
         elif classObject == build.DatabaseBuilder and method == 'optimize':
             print >>sys.stderr, stacktrace
