@@ -45,8 +45,9 @@ BUILD_GROUPS = {
     'data': ['SimilarCharacters', 'HSKVocabulary',
         'KangxiRadicalTable', 'RadicalNames_zh_cmn',
         'RadicalTable_zh_cmn__de', 'RadicalTable_zh_cmn__en',
-        'KangxiRadicalStrokeCount', 'EDICT', 'CEDICT', 'CEDICTGR', 'HanDeDict',
-        'UpdateVersion', 'Pronunciation_zh_cmn', 'Pronunciation_zh_yue'],
+        'KangxiRadicalStrokeCount', 'EDICT', 'CEDICT', 'CEDICTGR', 'CFDICT',
+        'HanDeDict', 'UpdateVersion', 'Pronunciation_zh_cmn',
+        'Pronunciation_zh_yue'],
     'base': ['UpdateVersion', 'SimilarCharacters', 'KangxiRadicalTable',
         'KangxiRadicalStrokeCount'],
     'zh-cmn': ['RadicalNames_zh_cmn', 'Pronunciation_zh_cmn'],
@@ -59,8 +60,9 @@ allowed and will lead to a lock up.
 """
 
 DB_PREFER_BUILDERS = ['WiktionaryHSKVocabularyBuilder', 'WeightedCEDICTBuilder',
-    'WeightedHanDeDictBuilder', 'WeightedCEDICTGRBuilder',
-    'WeightedEDICTBuilder', 'BaseAudioLibreDeMotsChinoisBuilder']
+    'WeightedCFDictBuilder', 'WeightedHanDeDictBuilder',
+    'WeightedCEDICTGRBuilder', 'WeightedEDICTBuilder',
+    'BaseAudioLibreDeMotsChinoisBuilder']
 """Builders prefered for build process."""
 
 class UpdateVersionBuilder(build.EntryGeneratorBuilder):
@@ -511,13 +513,16 @@ class WeightedCEDICTBuilder(WeightedMandarinCEDICTFormatBuilder,
                 pass
 
 
-class WeightedHanDeDictBuilder(WeightedMandarinCEDICTFormatBuilder,
-    build.HanDeDictBuilder):
+class WeightedTimestampedCEDICTFormatBuilder(
+    WeightedMandarinCEDICTFormatBuilder):
     """
-    Builds the HanDeDict dictionary with weights attached to each entry.
+    Shared functionality for dictionaries whose content includes a timestamp.
     """
+    EXTRACT_HEADER_TIMESTAMP = None
+    """Regular expression to extract the timestamp from the dict's header."""
+
     def extractVersion(self, line):
-        matchObj = re.search(u'# HanDeDict ([^\;]+); Copyright', line.strip())
+        matchObj = re.search(self.EXTRACT_HEADER_TIMESTAMP, line.strip())
         # Example: Sun Jan 18 00:34:02 2009
         if matchObj:
             try:
@@ -537,6 +542,22 @@ class WeightedHanDeDictBuilder(WeightedMandarinCEDICTFormatBuilder,
                     pass
             except ValueError, e:
                 pass
+
+
+class WeightedHanDeDictBuilder(WeightedTimestampedCEDICTFormatBuilder,
+    build.HanDeDictBuilder):
+    """
+    Builds the HanDeDict dictionary with weights attached to each entry.
+    """
+    EXTRACT_HEADER_TIMESTAMP = ur'# HanDeDict ([^\;]+); Copyright'
+
+
+class WeightedCFDictBuilder(WeightedTimestampedCEDICTFormatBuilder,
+    build.CFDICTBuilder):
+    """
+    Builds the CFDICT dictionary with weights attached to each entry.
+    """
+    EXTRACT_HEADER_TIMESTAMP = ur'# CFDICT ([^\;]+); Copyright'
 
 
 class HanDeDictRadicalTableBuilder(build.EntryGeneratorBuilder):
@@ -1126,8 +1147,7 @@ def usage():
 buildtables.py builds the database for chinesecharacterview.
 
 The database is stored according to the setting of the cjklib and can be changed
-by setting the cjklib.conf. Additionally all SQL commands can be printed to
-stdout specifying --dump.
+by setting the cjklib.conf.
 
 General commands:
   -b, --build=BUILD_GROUPS   adds a build group or a specific table to the build
@@ -1136,8 +1156,6 @@ General commands:
                                they already exist
   -l, --list-groups          list all available build groups and exists
   --dataPath=PATH            path to data files
-  --dump                     dumps all SQL statements to stdout; no support for
-                             builders that depend on a database being present
   -V, --version              prints the version information and exits
   -h, --help                 prints this help and exits
 """
@@ -1188,7 +1206,7 @@ def main():
     # parse command line parameters
     try:
         opts, args = getopt.getopt(sys.argv[1:], "b:rlqVh", ["help", "version",
-            "dataPath=", "build=", "rebuild", "list-groups", "quiet", "dump"])
+            "dataPath=", "build=", "rebuild", "list-groups", "quiet"])
     except getopt.GetoptError:
         # print help information and exit
         usage()
@@ -1198,7 +1216,6 @@ def main():
     dataPathList = []
     rebuild = False
     quiet = False
-    dump = False
 
     # get encoding
     language, system_encoding = locale.getdefaultlocale()
@@ -1226,9 +1243,6 @@ def main():
         # set quiet mode to true
         elif o in ("-q", "--quiet"):
             quiet = True
-        # set dump mode to true
-        elif o in ("--dump"):
-            dump = True
         # list build groups
         elif o in ("-l", "--list-groups"):
             printFormattedLine("Generic groups:\n" \
@@ -1297,11 +1311,7 @@ def main():
                 groups.append(group)
 
         # create builder instance
-        databaseSettings = {}
-        if dump:
-            databaseSettings = {'dump': True}
-        dbBuilder = build.DatabaseBuilder(dataPath=dataPath,
-            databaseSettings=databaseSettings, quiet=quiet,
+        dbBuilder = build.DatabaseBuilder(dataPath=dataPath, quiet=quiet,
             rebuildExisting=rebuild, noFail=noFail, prefer=DB_PREFER_BUILDERS,
             additionalBuilders=getTableBuilderClasses().values())
 

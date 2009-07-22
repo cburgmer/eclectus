@@ -47,6 +47,25 @@ from PyKDE4.kdeui import KApplication, KXmlGuiWindow, KShortcut, KIcon
 from PyKDE4.kdeui import KAction, KStandardAction, KToggleAction, KSelectAction
 from PyKDE4.kdeui import KStandardShortcut, KStandardGuiItem, KHistoryComboBox
 
+try:
+    import cjklib
+    try:
+        # warn while in alpha phase
+        from distutils import version
+        cjklibVersion = version.LooseVersion(cjklib.__version__)
+        if cjklibVersion != '0.1alpha' \
+            and cjklibVersion < version.LooseVersion('0.1alpha-svn20090722'):
+            import logging
+            logging.warn('Your cjklib version is too old.' \
+                + ' You might experience difficulties!')
+    except ImportError:
+        pass
+except ImportError:
+    print >>sys.stderr, \
+        "Please install cjklib from http://code.google.com/p/cjklib"
+    sys.exit(1)
+
+
 from eclectusqt import update           # load first so we throw out warning if
                                         #   cjklib is missing
 from eclectusqt import dictionarypage
@@ -77,6 +96,7 @@ class MainWindow(KXmlGuiWindow):
     DICTIONARY_NAMES = {'CEDICT': i18n('English-Chinese (CEDICT)'),
         'CEDICTGR': i18n('English-Chinese (CEDICT, GR version)'),
         'HanDeDict': i18n('German-Chinese (HanDeDict)'),
+        'CFDICT': i18n('French-Chinese (CFDICT)'),
         'EDICT': i18n('English-Japanese (EDICT)')}
 
     EXT_DICTIONARY_NAMES = {
@@ -88,6 +108,8 @@ class MainWindow(KXmlGuiWindow):
             i18n('Simplified Chinese-German (HanDeDict)'),
         ('zh-cmn-Hant', 'HanDeDict'): \
             i18n('Traditional Chinese-German (HanDeDict)'),
+        ('zh-cmn-Hans', 'CFDICT'): i18n('Simplified Chinese-French (CFDICT)'),
+        ('zh-cmn-Hant', 'CFDICT'): i18n('Traditional Chinese-French (CFDICT)'),
         ('ja', 'EDICT'): i18n('Japanese-English (EDICT)')}
 
     CHOOSER_PLUGINS = [

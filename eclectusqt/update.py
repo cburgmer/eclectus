@@ -240,6 +240,7 @@ class UpdateWidget(QWidget, UpdateUI.Ui_Form):
     DICTIONARY_NAMES = {'CEDICT': i18n('English-Chinese (CEDICT)'),
         'CEDICTGR': i18n('English-Chinese (CEDICT, GR version)'),
         'HanDeDict': i18n('German-Chinese (HanDeDict)'),
+        'CFDICT': i18n('French-Chinese (CFDICT)'),
         'EDICT': i18n('English-Japanese (EDICT)')}
 
     def __init__(self, mainWindow, renderThread, pluginConfig=None):
@@ -322,7 +323,7 @@ class UpdateWidget(QWidget, UpdateUI.Ui_Form):
         self.slotDictionarySelected(0)
 
     def getDictionaryCurrentVersion(self, dictionaryName):
-        return self.dictionaryCurrentVersion[dictionaryName]
+        return self.dictionaryCurrentVersion.get(dictionaryName)
 
     def getDictionaryNewestVersion(self, dictionaryName):
         downloader = self.getDownloader(dictionaryName)
@@ -683,6 +684,19 @@ class HanDeDictDownloader(DictionaryDownloader):
             return datetime.strptime(matchObj.group(1), '%Y%m%d').date()
 
 
+class CFDICTDownloader(DictionaryDownloader):
+    DOWNLOADER_NAME = 'CFDict'
+    DEFAULT_DOWNLOAD_PAGE = u'http://www.chinaboard.de/cfdict.php?mode=dl'
+    DOWNLOAD_REGEX = re.compile(u'<a href="(cfdict/cfdict-(?:\d+).tar.bz2)">')
+
+    DATE_REGEX = re.compile(u'<a href="cfdict/cfdict-(\d+).tar.bz2">')
+
+    def getDate(self):
+        matchObj = self.DATE_REGEX.search(self.getDownloadPageContent())
+        if matchObj:
+            return datetime.strptime(matchObj.group(1), '%Y%m%d').date()
+
+
 class CEDICTDownloader(DictionaryDownloader):
     DOWNLOADER_NAME = 'CEDICT'
     DEFAULT_DOWNLOAD_PAGE \
@@ -740,7 +754,8 @@ class EDICTDownloader(DictionaryDownloader):
 
 
 CLASS_DICT = {'CEDICT': CEDICTDownloader, 'HanDeDict': HanDeDictDownloader,
-    'CEDICTGR': CEDICTGRDownloader, 'EDICT': EDICTDownloader}
+    'CFDICT': CFDICTDownloader, 'CEDICTGR': CEDICTGRDownloader,
+    'EDICT': EDICTDownloader}
 
 def getDownloader(dictName, parent):
     downloaderClass = CLASS_DICT[dictName]
