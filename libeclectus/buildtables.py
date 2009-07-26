@@ -20,7 +20,6 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 """
 
-import getopt
 import locale
 import types
 import sys
@@ -28,7 +27,6 @@ import os
 import re
 import xml.sax
 import bz2
-import functools
 from datetime import datetime
 
 from sqlalchemy import Table, Column, Integer, String, Text, DateTime, Index
@@ -37,35 +35,10 @@ from sqlalchemy import select
 
 from cjklib import characterlookup
 from cjklib.reading import ReadingFactory
-from cjklib import build
+from cjklib.build import builder, cli, warn
 from cjklib import exception
 
-BUILD_GROUPS = {
-    # source based
-    'data': ['SimilarCharacters', 'HSKVocabulary',
-        'KangxiRadicalTable', 'RadicalNames_zh_cmn',
-        'RadicalTable_zh_cmn__de', 'RadicalTable_zh_cmn__en',
-        'KangxiRadicalStrokeCount', 'EDICT', 'CEDICT', 'CEDICTGR', 'CFDICT',
-        'HanDeDict', 'UpdateVersion', 'Pronunciation_zh_cmn',
-        'Pronunciation_zh_yue'],
-    'base': ['UpdateVersion', 'SimilarCharacters', 'KangxiRadicalTable',
-        'KangxiRadicalStrokeCount'],
-    'zh-cmn': ['RadicalNames_zh_cmn', 'Pronunciation_zh_cmn'],
-    'ja': ['RadicalTable_ja__en'],
-    'HanDeDict_related': ['RadicalTable_zh_cmn__de'],
-}
-"""
-Definition of build groups available to the user. Recursive definitions are not
-allowed and will lead to a lock up.
-"""
-
-DB_PREFER_BUILDERS = ['WiktionaryHSKVocabularyBuilder', 'WeightedCEDICTBuilder',
-    'WeightedCFDictBuilder', 'WeightedHanDeDictBuilder',
-    'WeightedCEDICTGRBuilder', 'WeightedEDICTBuilder',
-    'BaseAudioLibreDeMotsChinoisBuilder']
-"""Builders prefered for build process."""
-
-class UpdateVersionBuilder(build.EntryGeneratorBuilder):
+class UpdateVersionBuilder(builder.EntryGeneratorBuilder):
     """Table for keeping track of which date the release was."""
     PROVIDES = 'UpdateVersion'
     COLUMNS = ['TableName', 'ReleaseDate']
@@ -73,10 +46,10 @@ class UpdateVersionBuilder(build.EntryGeneratorBuilder):
     COLUMN_TYPES = {'TableName': String(255), 'ReleaseDate': DateTime()}
 
     def getGenerator(self):
-        return build.ListGenerator([]).generator()
+        return builder.ListGenerator([]).generator()
 
 
-class SimilarCharactersBuilder(build.CSVFileLoader):
+class SimilarCharactersBuilder(builder.CSVFileLoader):
     """
     Builds a list of characters with similar visual appearance.
     """
@@ -86,7 +59,7 @@ class SimilarCharactersBuilder(build.CSVFileLoader):
     TABLE_DECLARATION_FILE_MAPPING = 'similarcharacters.sql'
 
 
-class RadicalNamesZHCMNBuilder(build.CSVFileLoader):
+class RadicalNamesZHCMNBuilder(builder.CSVFileLoader):
     """
     Builds a list of kangxi radical names for Mandarin Chinese.
     """
@@ -96,7 +69,7 @@ class RadicalNamesZHCMNBuilder(build.CSVFileLoader):
     TABLE_DECLARATION_FILE_MAPPING = 'radicalnames_zh-cmn.sql'
 
 
-class BeidaHSKVocabularyBuilder(build.CSVFileLoader):
+class BeidaHSKVocabularyBuilder(builder.CSVFileLoader):
     """
     Builds a table of HSK (Hanyu Shuiping Kaoshi, Chinese proficiency test) by
     loading its data from a list of comma separated values (CSV) provided in the
@@ -133,11 +106,11 @@ class BeidaHSKVocabularyBuilder(build.CSVFileLoader):
                     currentLevel = self.LEVELS[line[1][0]]
                 elif not self.quiet and not re.match(r'^[a-zA-Z]$', line[1]):
                     # skip categories A, B, ... but warn on other content
-                    build.warn("Errorneous line: '" + "', '".join(line) + "'")
+                    warn("Errorneous line: '" + "', '".join(line) + "'")
                 continue
 
             if currentLevel == None and not self.quiet:
-                build.warn("No level information found, skipping line: '" \
+                warn("No level information found, skipping line: '" \
                     + "', '".join(line) + "'")
                 continue
 
@@ -177,13 +150,13 @@ class BeidaHSKVocabularyBuilder(build.CSVFileLoader):
 
         if not self.quiet:
             if doubleEntryCount:
-                build.warn("Found " + str(doubleEntryCount) + " repeated entries")
+                warn("Found " + str(doubleEntryCount) + " repeated entries")
             if multiEntryCount:
-                build.warn("Found " + str(multiEntryCount) \
+                warn("Found " + str(multiEntryCount) \
                     + " lines with multiple entries")
 
 
-class WiktionaryHSKVocabularyBuilder(build.CSVFileLoader):
+class WiktionaryHSKVocabularyBuilder(builder.CSVFileLoader):
     """
     Builds a table of HSK (Hanyu Shuiping Kaoshi, Chinese proficiency test) by
     loading its data from a list of comma separated values (CSV) provided from
@@ -246,11 +219,11 @@ class WiktionaryHSKVocabularyBuilder(build.CSVFileLoader):
 
         if not self.quiet:
             if doubleEntryCount:
-                build.warn("Found " + str(doubleEntryCount) \
+                warn("Found " + str(doubleEntryCount) \
                     + " repeated entries")
 
 
-class WeightedEDICTFormatBuilder(build.EDICTFormatBuilder):
+class WeightedEDICTFormatBuilder(builder.EDICTFormatBuilder):
     """
     Provides an abstract class for loading EDICT formatted dictionaries together
     with a weight attached to each entry provided by an additional.
@@ -318,10 +291,6 @@ class WeightedEDICTFormatBuilder(build.EDICTFormatBuilder):
     {dictCol1: weightCol1, dictCol2: weightCol2}
     """
 
-    def __init__(self, dataPath, dbConnectInst, quiet=False):
-        super(WeightedEDICTFormatBuilder, self).__init__(dataPath,
-            dbConnectInst, quiet)
-
     def getGenerator(self):
         if self.WEIGHT_TABLE:
             # get weight entries
@@ -344,7 +313,8 @@ class WeightedEDICTFormatBuilder(build.EDICTFormatBuilder):
 
         # create generator, and put on top of the super init method's generator
         return WeightedEDICTFormatBuilder.WeightedEntryGenerator(
-            build.EDICTFormatBuilder.getGenerator(self), weightFunc).generator()
+            builder.EDICTFormatBuilder.getGenerator(self), weightFunc)\
+                .generator()
 
     def getFileHandle(self, filePath):
         handle = super(WeightedEDICTFormatBuilder, self).getFileHandle(filePath)
@@ -385,7 +355,7 @@ class WeightedEDICTFormatBuilder(build.EDICTFormatBuilder):
             return None
 
     def remove(self):
-        build.EDICTFormatBuilder.remove(self)
+        builder.EDICTFormatBuilder.remove(self)
 
         self.removeVersion()
 
@@ -421,7 +391,7 @@ class WeightedEDICTFormatBuilder(build.EDICTFormatBuilder):
         pass
 
 
-class WeightedEDICTBuilder(WeightedEDICTFormatBuilder, build.EDICTBuilder):
+class WeightedEDICTBuilder(WeightedEDICTFormatBuilder, builder.EDICTBuilder):
     """
     Provides an class for loading the EDICT dictionary together with a weight
     attached to each entry provided by an additional source.
@@ -445,7 +415,7 @@ class WeightedEDICTBuilder(WeightedEDICTFormatBuilder, build.EDICTBuilder):
 
 
 class WeightedCEDICTGRBuilder(WeightedEDICTFormatBuilder,
-    build.CEDICTGRBuilder):
+    builder.CEDICTGRBuilder):
     """
     Provides an class for loading the CEDICT-GR dictionary from GR  Junction
     together with a weight attached to each entry provided by an additional
@@ -482,11 +452,10 @@ class WeightedCEDICTFormatBuilder(WeightedEDICTFormatBuilder):
         'HeadwordSimplified': String(255), 'Reading': String(255),
         'Translation': Text(), 'Weight': Integer()}
 
-    def __init__(self, dataPath, dbConnectInst, quiet=False):
+    def __init__(self, **options):
         self.ENTRY_REGEX = \
             re.compile(r'\s*(\S+)(?:\s+(\S+))?\s*\[([^\]]*)\]\s*(/.*/)\s*$')
-        super(WeightedCEDICTFormatBuilder, self).__init__(dataPath,
-            dbConnectInst, quiet)
+        super(WeightedCEDICTFormatBuilder, self).__init__(**options)
 
 
 class WeightedMandarinCEDICTFormatBuilder(WeightedCEDICTFormatBuilder):
@@ -498,7 +467,7 @@ class WeightedMandarinCEDICTFormatBuilder(WeightedCEDICTFormatBuilder):
 
 
 class WeightedCEDICTBuilder(WeightedMandarinCEDICTFormatBuilder,
-    build.CEDICTBuilder):
+    builder.CEDICTBuilder):
     """
     Builds the CEDICT dictionary with weights attached to each entry.
     """
@@ -545,7 +514,7 @@ class WeightedTimestampedCEDICTFormatBuilder(
 
 
 class WeightedHanDeDictBuilder(WeightedTimestampedCEDICTFormatBuilder,
-    build.HanDeDictBuilder):
+    builder.HanDeDictBuilder):
     """
     Builds the HanDeDict dictionary with weights attached to each entry.
     """
@@ -553,14 +522,14 @@ class WeightedHanDeDictBuilder(WeightedTimestampedCEDICTFormatBuilder,
 
 
 class WeightedCFDictBuilder(WeightedTimestampedCEDICTFormatBuilder,
-    build.CFDICTBuilder):
+    builder.CFDICTBuilder):
     """
     Builds the CFDICT dictionary with weights attached to each entry.
     """
     EXTRACT_HEADER_TIMESTAMP = ur'# CFDICT ([^\;]+); Copyright'
 
 
-class HanDeDictRadicalTableBuilder(build.EntryGeneratorBuilder):
+class HanDeDictRadicalTableBuilder(builder.EntryGeneratorBuilder):
     """
     Builds a radical table with index, reading and meaning using the dictionary
     HanDeDict.
@@ -612,16 +581,12 @@ class HanDeDictRadicalTableBuilder(build.EntryGeneratorBuilder):
     COLUMN_TYPES = {'RadicalIndex': Integer(), 'Reading': String(255),
         'Meaning': Text()}
 
-    def __init__(self, dataPath, dbConnectInst, quiet=False):
-        super(HanDeDictRadicalTableBuilder, self).__init__(dataPath,
-            dbConnectInst, quiet)
-
     def getGenerator(self):
         return HanDeDictRadicalTableBuilder.RadicalEntryGenerator(self.db)\
             .generator()
 
 
-class KanjidicEnRadicalTableBuilder(build.EntryGeneratorBuilder):
+class KanjidicEnRadicalTableBuilder(builder.EntryGeneratorBuilder):
     """
     Builds a radical table with index, radical name and meaning using Kanjidic.
     """
@@ -671,10 +636,6 @@ class KanjidicEnRadicalTableBuilder(build.EntryGeneratorBuilder):
     MEANING_SOURCE = 'Meaning_en'
     REMOVE_PARTS = re.compile(' radical( variant)?')
 
-    def __init__(self, dataPath, dbConnectInst, quiet=False):
-        super(KanjidicEnRadicalTableBuilder, self).__init__(dataPath,
-            dbConnectInst, quiet)
-
     def getGenerator(self):
         return KanjidicEnRadicalTableBuilder.RadicalEntryGenerator(self.db)\
             .generator()
@@ -690,7 +651,7 @@ class KanjidicFrRadicalTableBuilder(KanjidicEnRadicalTableBuilder):
     REMOVE_PARTS = re.compile('radical (variant )?')
 
 
-class KangxiRadicalTableBuilder(build.EntryGeneratorBuilder):
+class KangxiRadicalTableBuilder(builder.EntryGeneratorBuilder):
     """
     Builds a Kangxi radical table with index, radical form (traditional radical
     form, locale dependant radical form and variants), type of radical form
@@ -790,16 +751,12 @@ class KangxiRadicalTableBuilder(build.EntryGeneratorBuilder):
     COLUMN_TYPES = {'RadicalIndex': Integer(), 'Form': String(1),
         'Type': String(1), 'Locale': String(6)}
 
-    def __init__(self, dataPath, dbConnectInst, quiet=False):
-        super(KangxiRadicalTableBuilder, self).__init__(dataPath,
-            dbConnectInst, quiet)
-
     def getGenerator(self):
         return KangxiRadicalTableBuilder.RadicalEntryGenerator(self.db)\
             .generator()
 
 
-class KangxiRadicalStrokeCountBuilder(build.EntryGeneratorBuilder):
+class KangxiRadicalStrokeCountBuilder(builder.EntryGeneratorBuilder):
     """
     Builds a table with the stroke count of all Kangxi radical main forms.
     """
@@ -832,16 +789,12 @@ class KangxiRadicalStrokeCountBuilder(build.EntryGeneratorBuilder):
     PRIMARY_KEYS = ['RadicalIndex']
     COLUMN_TYPES = {'RadicalIndex': Integer(), 'StrokeCount': Integer()}
 
-    def __init__(self, dataPath, dbConnectInst, quiet=False):
-        super(KangxiRadicalStrokeCountBuilder, self).__init__(dataPath,
-            dbConnectInst, quiet)
-
     def getGenerator(self):
         return KangxiRadicalStrokeCountBuilder.RadicalEntryGenerator(self.db)\
             .generator()
 
 
-class SwacAudioCollectionBuilder(build.EntryGeneratorBuilder):
+class SwacAudioCollectionBuilder(builder.EntryGeneratorBuilder):
     """
     Builds an index on a swac audio collection.
     """
@@ -927,7 +880,7 @@ class SwacAudioCollectionBuilder(build.EntryGeneratorBuilder):
                 seenPronunciations.add(pronunciation)
 
             if not self.quiet and doubletteCount:
-                build.warn("Found " + str(doubletteCount) \
+                warn("Found " + str(doubletteCount) \
                     + " similar pronunciations, omitted")
 
     COLUMNS = ['Pronunciation', 'AudioFilePath']
@@ -936,10 +889,6 @@ class SwacAudioCollectionBuilder(build.EntryGeneratorBuilder):
 
     BASE_DIRECTORY_NAME = None
     """Name of the base folder of the set as supplied in the .tar file."""
-
-    def __init__(self, dataPath, dbConnectInst, quiet=False):
-        super(SwacAudioCollectionBuilder, self).__init__(dataPath,
-            dbConnectInst, quiet)
 
     def getGenerator(self):
         return SwacAudioCollectionBuilder.SwaxIndexGenerator(self.dataPath,
@@ -955,7 +904,7 @@ class BaseAudioLibreDeMotsChinoisBuilder(SwacAudioCollectionBuilder):
     BASE_DIRECTORY_NAME = 'chi-balm-hsk1_ogg'
 
 
-class GlobbingPronunciationBuilder(build.EntryGeneratorBuilder):
+class GlobbingPronunciationBuilder(builder.EntryGeneratorBuilder):
     """
     Provides an abstract builder for creating an index on a directory of
     pronunciation files following a given mapping from file name to reading.
@@ -1029,19 +978,15 @@ class GlobbingPronunciationBuilder(build.EntryGeneratorBuilder):
 
                             seenPronunciations.add(pronunciation)
                         elif not self.quiet:
-                            build.warn("No reading gathered from '" \
+                            warn("No reading gathered from '" \
                                 + str(relativePath) + "',  ommitting")
 
             except IOError:
                 raise IOError("Error reading directory '" + filePath + "'")
 
             if not self.quiet and doubletteCount:
-                build.warn("Found " + str(doubletteCount) \
+                warn("Found " + str(doubletteCount) \
                     + " similar pronunciations, omitted")
-
-    def __init__(self, dataPath, dbConnectInst, quiet=False):
-        super(GlobbingPronunciationBuilder, self).__init__(dataPath,
-            dbConnectInst, quiet)
 
     def getGenerator(self):
         return GlobbingPronunciationBuilder.FileNameEntryGenerator(dataPath,
@@ -1066,9 +1011,8 @@ class ChineseLessonsComCantonesePronunciation(GlobbingPronunciationBuilder):
         'MR': '2ndTone', 'MT': '3rdTone', 'LF': '4thTone', 'LR': '5thTone',
         'LT': '6thTone'}
 
-    def __init__(self, dataPath, dbConnectInst, quiet=False):
-        super(ChineseLessonsComCantonesePronunciation, self).__init__(dataPath,
-            dbConnectInst, quiet)
+    def __init__(self, **options):
+        super(ChineseLessonsComCantonesePronunciation, self).__init__(**options)
 
         self.readingFactory = ReadingFactory()
 
@@ -1086,6 +1030,7 @@ class ChineseLessonsComCantonesePronunciation(GlobbingPronunciationBuilder):
             except exception.ConversionError:
                 pass
 
+
 class ChineseLessonsComMandarinPronunciation(GlobbingPronunciationBuilder):
     """
     Builds an index on pronunciation files for Mandarin provided by
@@ -1096,9 +1041,8 @@ class ChineseLessonsComMandarinPronunciation(GlobbingPronunciationBuilder):
 
     BASE_DIRECTORY_NAME = "chineselessionscom_cmn"
 
-    def __init__(self, dataPath, dbConnectInst, quiet=False):
-        super(ChineseLessonsComMandarinPronunciation, self).__init__(dataPath,
-            dbConnectInst, quiet)
+    def __init__(self, **options):
+        super(ChineseLessonsComMandarinPronunciation, self).__init__(**options)
 
         self.readingFactory = ReadingFactory()
 
@@ -1113,218 +1057,68 @@ class ChineseLessonsComMandarinPronunciation(GlobbingPronunciationBuilder):
             pass
 
 
-# builder
-def getTableBuilderClasses():
-    """
-    Gets all classes in module that implement L{TableBuilder}.
+class EclectusCommandLineBuilder(cli.CommandLineBuilder):
+    DESCRIPTION = """Builds the database for Eclectus.
+The database is accessed according to the settings of cjklib in cjklib.conf.
+Example: \"%prog build allAvail\""""
 
-    @rtype: dict
-    @return: dictionary of all classes inheriting form L{TableBuilder} that
-        provide a table (i.d. non abstract implementations), with its name
-        as key
-    """
-    tableBuilderClasses = dict([(clss.__name__, clss) \
-        for clss in globals().values() \
-        if type(clss) == types.TypeType \
-        and issubclass(clss, build.TableBuilder) \
-        and clss.PROVIDES])
+    BUILD_GROUPS = {
+        # source based
+        'data': ['SimilarCharacters', 'HSKVocabulary',
+            'KangxiRadicalTable', 'RadicalNames_zh_cmn',
+            'RadicalTable_zh_cmn__de', 'RadicalTable_zh_cmn__en',
+            'KangxiRadicalStrokeCount', 'EDICT', 'CEDICT', 'CEDICTGR', 'CFDICT',
+            'HanDeDict', 'UpdateVersion', 'Pronunciation_zh_cmn',
+            'Pronunciation_zh_yue'],
+        'base': ['UpdateVersion', 'SimilarCharacters', 'KangxiRadicalTable',
+            'KangxiRadicalStrokeCount'],
+        'zh-cmn': ['RadicalNames_zh_cmn', 'Pronunciation_zh_cmn'],
+        'ja': ['RadicalTable_ja__en'],
+        'HanDeDict_related': ['RadicalTable_zh_cmn__de'],
+    }
 
-    return tableBuilderClasses
+    DB_PREFER_BUILDERS = ['WiktionaryHSKVocabularyBuilder',
+        'WeightedCEDICTBuilder', 'WeightedCFDictBuilder',
+        'WeightedHanDeDictBuilder', 'WeightedCEDICTGRBuilder',
+        'WeightedEDICTBuilder', 'BaseAudioLibreDeMotsChinoisBuilder']
+    """Builders prefered for build process."""
 
-
-def version():
-    """
-    Prints the version of this script.
-    """
-    print "buildtables.py " \
-        + """\nCopyright (C) 2006-2009 Christoph Burgmer"""
-
-def usage():
-    """
-    Prints the usage for this script.
-    """
-    print u"""Usage: buildtables.py COMMAND
-buildtables.py builds the database for chinesecharacterview.
-
-The database is stored according to the setting of the cjklib and can be changed
-by setting the cjklib.conf.
-
-General commands:
-  -b, --build=BUILD_GROUPS   adds a build group or a specific table to the build
-                               list
-  -r, --rebuild              tells the build process to rebuild tables even if
-                               they already exist
-  -l, --list-groups          list all available build groups and exists
-  --dataPath=PATH            path to data files
-  -V, --version              prints the version information and exits
-  -h, --help                 prints this help and exits
-"""
-
-def printFormattedLine(outputString, lineLength=80, subsequentPrefix=''):
-    """
-    Formats the given input string to fit to a output with a limited line
-    length and prints it to stdout with the systems encoding.
-
-    @type outputString: string
-    @param outputString: a string that is formated to fit to the screen
-    @type lineLength: integer
-    @param lineLength: with of screen
-    @type subsequentPrefix: string
-    @param subsequentPrefix: prefix used after line break
-    """
-    outputLines = []
-    for line in outputString.split("\n"):
-        outputEntityList = line.split()
-        outputEntityList.reverse()
-        column = 0
-        output = ''
-        while outputEntityList:
-            entity = outputEntityList.pop()
-            # if the next entity including one trailing space will reach over,
-            # break the line
-            if column > 0 and len(entity) + column >= lineLength:
-                output = output + "\n" + subsequentPrefix + entity
-                column = len(subsequentPrefix) + len(entity)
-            else:
-                if column > 0:
-                    output = output + ' '
-                    column = column + 1
-                column = column + len(entity)
-                output = output + entity
-            #if len(column) >= lineLength and outputEntityList:
-                #output = output + "\n" + subsequentPrefix
-                #column = len(subsequentPrefix)
-        outputLines.append(output)
-    # get output encoding
-    language, system_encoding = locale.getdefaultlocale()
-    print ("\n".join(outputLines)).encode(system_encoding)
-
-def main():
-    """
-    Main method of script
-    """
-    # parse command line parameters
-    try:
-        opts, args = getopt.getopt(sys.argv[1:], "b:rlqVh", ["help", "version",
-            "dataPath=", "build=", "rebuild", "list-groups", "quiet"])
-    except getopt.GetoptError:
-        # print help information and exit
-        usage()
-        sys.exit(2)
-
-    buildGroupList = []
-    dataPathList = []
-    rebuild = False
-    quiet = False
-
-    # get encoding
-    language, system_encoding = locale.getdefaultlocale()
-    # start to check parameters
-    if len(opts) == 0:
-        printFormattedLine("use parameter -h for a short summary on " \
-            + "supported parameters")
-    for o, a in opts:
-        a = a.decode(system_encoding)
-        # help screen
-        if o in ("-h", "--help"):
-            usage()
-            sys.exit()
-        # version message
-        elif o in ("-V", "--version"):
-            version()
-            sys.exit()
-        # build group
-        elif o in ("-b", "--build"):
-            buildGroupList.extend([groupName.strip() for groupName \
-                in a.split(',')])
-        # set rebuild mode to true
-        elif o in ("-r", "--rebuild"):
-            rebuild = True
-        # set quiet mode to true
-        elif o in ("-q", "--quiet"):
-            quiet = True
-        # list build groups
-        elif o in ("-l", "--list-groups"):
-            printFormattedLine("Generic groups:\n" \
-                + "all, for all tables understood by the build script\n" \
-                + "allAvail, for all data available to the build script\n")
-            printFormattedLine("Standard groups:")
-            groupList = BUILD_GROUPS.keys()
-            groupList.sort()
-            for groupName in groupList:
-                content = []
-                # get group content, add apostrophes for "sub"groups
-                for member in BUILD_GROUPS[groupName]:
-                    if BUILD_GROUPS.has_key(member):
-                        content.append("'" + member + "'")
-                    else:
-                        content.append(member)
-                printFormattedLine(groupName + ": " + ', '.join(content),
-                    subsequentPrefix='  ')
-            printFormattedLine("\nGroup names and table names can either be " \
-                "given to the build process.")
-            sys.exit()
-        # data path
-        elif o in ("--dataPath"):
-            dataPathList.append(a)
-
-    # if no path set, asume default
-    if not dataPathList:
-        dataPathList = ['.']
+    @classmethod
+    def getDefaultOptions(cls):
+        options = cli.CommandLineBuilder.getDefaultOptions()
+        # dataPath
+        options['dataPath'] = ['.']
         # Eclectus path
         buildModulePath = os.path.dirname(os.path.abspath(__file__))
-        dataPathList.append(os.path.join(buildModulePath, 'data'))
+        options['dataPath'].append(os.path.join(buildModulePath, 'data'))
         # cjklib path
         cjklibBuildModule = __import__("cjklib.build")
         cjklibBuildModulePath = os.path.dirname(os.path.abspath(
             cjklibBuildModule.__file__))
-        dataPathList.append(os.path.join(cjklibBuildModulePath, 'data'))
+        options['dataPath'].append(os.path.join(cjklibBuildModulePath, 'data'))
 
-    dataPath = []
-    for pathEntry in dataPathList:
-        dataPath.extend(pathEntry.split(':'))
+        # prefer
+        options['prefer'] = cls.DB_PREFER_BUILDERS
+        return options
 
-    if buildGroupList:
-        # by default fail if a table couldn't be built
-        noFail = False
-        if 'all' in buildGroupList or 'allAvail' in buildGroupList:
-            if 'allAvail' in buildGroupList:
-                if len(buildGroupList) == 1:
-                    # don't fail on non available
-                    noFail = True
-                else:
-                    # allAvail not compatible with others, as allAvail means not
-                    # failing if build fails, but others will need failing when
-                    # explicitly named
-                    raise ValueError("group 'allAvail' can't be specified " \
-                        + "together with other groups.")
-            # if generic group given get list
-            buildGroupList = build.DatabaseBuilder.getSupportedTables()
+    @classmethod
+    def getTableBuilderClasses(cls):
+        """
+        Gets all classes in module that implement L{TableBuilder}.
 
-        # unpack groups
-        groups = []
-        while len(buildGroupList) != 0:
-            group = buildGroupList.pop()
-            if BUILD_GROUPS.has_key(group):
-                buildGroupList.extend(BUILD_GROUPS[group])
-            else:
-                groups.append(group)
+        @rtype: list
+        @return: list of all classes inheriting form L{TableBuilder} that
+            provide a table (i.d. non abstract implementations), with its name
+            as key
+        """
+        return [clss for clss in globals().values() \
+            if type(clss) == types.TypeType \
+            and issubclass(clss, builder.TableBuilder) \
+            and clss.PROVIDES]
 
-        # create builder instance
-        dbBuilder = build.DatabaseBuilder(dataPath=dataPath, quiet=quiet,
-            rebuildExisting=rebuild, noFail=noFail, prefer=DB_PREFER_BUILDERS,
-            additionalBuilders=getTableBuilderClasses().values())
+        return tableBuilderClasses
 
-        try:
-            dbBuilder.build(groups)
-
-            print "done"
-        except exception.UnsupportedError:
-            printFormattedLine("error building local tables, some names " \
-                + "do not exist")
-            raise
-        except KeyboardInterrupt:
-            print >>sys.stderr, "Keyboard interrupt."
 
 if __name__ == "__main__":
-    main()
+    if not EclectusCommandLineBuilder().run():
+        sys.exit(1)

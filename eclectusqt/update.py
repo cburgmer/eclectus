@@ -24,7 +24,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 import re
 import codecs
 import urlparse
-import tempfile
 import sys
 import os
 from datetime import date, time, datetime
@@ -49,7 +48,7 @@ from eclectusqt import util
 
 from libeclectus import characterinfo
 from libeclectus import htmlview
-from libeclectus import buildtables
+from libeclectus.buildtables import EclectusCommandLineBuilder
 
 from eclectusqt.forms import UpdateUI
 
@@ -146,14 +145,14 @@ class UpdateDialog(KDialog):
         """
         Checks if the database holds the basic tables Eclectus needs to operate.
         @rtype: boolean
-        @return: True if base tables as described in L{buildtables.BUILD_GROUPS}
-            exists, False otherwise
+        @return: True if base tables as described in
+            L{EclectusCommandLineBuilder.BUILD_GROUPS} exists, False otherwise
         """
-        if 'base' in buildtables.BUILD_GROUPS:
+        if 'base' in EclectusCommandLineBuilder.BUILD_GROUPS:
             charInfo = self.renderThread.getObjectInstance(
                 characterinfo.CharacterInfo)
             db = charInfo.db
-            for table in buildtables.BUILD_GROUPS['base']:
+            for table in EclectusCommandLineBuilder.BUILD_GROUPS['base']:
                 if not db.engine.has_table(table):
                     return False
         return True
@@ -163,18 +162,18 @@ class UpdateDialog(KDialog):
         self.loadDatabaseBuilder()
         QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
 
-        if 'base' not in buildtables.BUILD_GROUPS:
+        if 'base' not in EclectusCommandLineBuilder.BUILD_GROUPS:
             raise Exception('Do not know how to create base tables')
         dbBuild = self.renderThread.getObjectInstance(build.DatabaseBuilder)
         dbBuild.rebuildExisting = False
         self.currentJob = self.renderThread.enqueue(build.DatabaseBuilder,
-            'build', buildtables.BUILD_GROUPS['base'])
+            'build', EclectusCommandLineBuilder.BUILD_GROUPS['base'])
 
     def loadDatabaseBuilder(self):
         if not self.renderThread.hasObject(build.DatabaseBuilder):
-            builders = buildtables.getTableBuilderClasses().values()
+            builders = EclectusCommandLineBuilder.getTableBuilderClasses()
             self.renderThread.setObject(build.DatabaseBuilder, quiet=False,
-                prefer=buildtables.DB_PREFER_BUILDERS,
+                prefer=EclectusCommandLineBuilder.DB_PREFER_BUILDERS,
                 additionalBuilders=builders)
             dbBuild = self.renderThread.getObjectInstance(build.DatabaseBuilder)
             # add Eclectus' path
@@ -363,27 +362,21 @@ class UpdateWidget(QWidget, UpdateUI.Ui_Form):
         self.installButton.setEnabled(False)
         self.setWorking(True)
 
-        filePath = downloader.download()
+        filePath, fileType = downloader.download()
         if filePath:
-            path = os.path.dirname(filePath)
-
             self.statusLabel.setText(i18n('Installing...', link))
 
-            #self.loadDatabaseBuilder() # TODO remove
             dbBuild = self.renderThread.getObjectInstance(build.DatabaseBuilder)
-            # TODO
-            #dataPath = [path]
-            #dataPath.extend(util.getDataPaths())
-            #dbBuild.setDataPath(dataPath)
-            dbBuild.dataPath.append(path)
-            dbBuild.rebuildExisting = True
+            dbBuild.addBuilderOptions(
+                {'filePath': unicode(filePath), 'fileType': unicode(fileType)})
 
             tables = [self.currentDictionary]
 
             # look for related tables and install them, too
             relatedKey = self.currentDictionary + '_related'
-            if relatedKey in buildtables.BUILD_GROUPS:
-                tables.extend(buildtables.BUILD_GROUPS[relatedKey])
+            if relatedKey in EclectusCommandLineBuilder.BUILD_GROUPS:
+                tables.extend(
+                    EclectusCommandLineBuilder.BUILD_GROUPS[relatedKey])
 
             # TODO if for the first time a new language is installed check if
             #  tables in BUILD_GROUPS (zh-cmn, ja) need to be installed
@@ -404,7 +397,6 @@ class UpdateWidget(QWidget, UpdateUI.Ui_Form):
         self.installButton.setEnabled(False)
         self.setWorking(True)
 
-        #self.loadDatabaseBuilder() # TODO remove
         self.currentJob = self.renderThread.enqueue(build.DatabaseBuilder,
             'remove', [self.currentDictionary])
 
@@ -622,37 +614,18 @@ class DictionaryDownloader:
             self.parentWidget):
             self.lastError = None
 
-            try:
-                # TODO we can save all the renaming if the building process
-                #   would support parameter passing, so that we could supply the
-                #   name
-                _, _, onlinePath, _, _ = urlparse.urlsplit(
-                    self.getDownloadLink())
-                _, fileName = onlinePath.rsplit('/',1)
+            _, _, onlinePath, _, _ = urlparse.urlsplit(
+                self.getDownloadLink())
+            fileType = None
+            matchObj = re.search('\.(zip|tar|tar\.bz2|tar\.gz|txt)$',
+                onlinePath)
+            if matchObj:
+                fileType = matchObj.group(0)
 
-                dirPath = tempfile.mkdtemp(prefix='eclectus')
-                self.temporaryFiles.append(dirPath)
-                targetPath = os.path.join(dirPath, fileName)
-
-                # TODO Windows
-                if 'posix' in sys.builtin_module_names:
-                    os.symlink(unicode(tempFileName), targetPath)
-                else:
-                    import shutil
-                    shutil.copy(unicode(tempFileName), targetPath)
-                    del shutil
-                self.temporaryFiles.append(targetPath)
-                return targetPath
-
-            except OSError, e:
-                self.lastError = unicode(e)
-                return None
-            except IOError, e:
-                self.lastError = unicode(e)
-                return None
+            return tempFileName, fileType
         else:
             self.lastError = unicode(KIO.NetAccess.lastErrorString())
-            return None
+            return None, None
 
     def cleanUp(self):
         while len(self.temporaryFiles) > 0:
