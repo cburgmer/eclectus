@@ -989,8 +989,8 @@ class GlobbingPronunciationBuilder(builder.EntryGeneratorBuilder):
                     + " similar pronunciations, omitted")
 
     def getGenerator(self):
-        return GlobbingPronunciationBuilder.FileNameEntryGenerator(dataPath,
-            self.BASE_DIRECTORY_NAME, self.FILE_EXTENSIONS,
+        return GlobbingPronunciationBuilder.FileNameEntryGenerator(
+            self.dataPath, self.BASE_DIRECTORY_NAME, self.FILE_EXTENSIONS,
             self.getReadingFromFileName, quiet=quiet).generator()
 
     def getReadingFromFileName(self, fileName):
@@ -1099,6 +1099,7 @@ Example: \"%prog build allAvail\""""
 
         # prefer
         options['prefer'] = cls.DB_PREFER_BUILDERS
+        options['additionalBuilders'] = cls.getTableBuilderClasses()
         return options
 
     @classmethod

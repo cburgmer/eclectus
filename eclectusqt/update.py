@@ -171,16 +171,8 @@ class UpdateDialog(KDialog):
 
     def loadDatabaseBuilder(self):
         if not self.renderThread.hasObject(build.DatabaseBuilder):
-            builders = EclectusCommandLineBuilder.getTableBuilderClasses()
-            self.renderThread.setObject(build.DatabaseBuilder, quiet=False,
-                prefer=EclectusCommandLineBuilder.DB_PREFER_BUILDERS,
-                additionalBuilders=builders)
-            dbBuild = self.renderThread.getObjectInstance(build.DatabaseBuilder)
-            # add Eclectus' path
-            buildModule = __import__("libeclectus.buildtables")
-            buildModulePath = os.path.dirname(os.path.abspath(
-                buildModule.__file__))
-            dbBuild.dataPath.append(os.path.join(buildModulePath, 'data'))
+            options = EclectusCommandLineBuilder.getDefaultOptions()
+            self.renderThread.setObject(build.DatabaseBuilder, **options)
 
     def _reloadObjects(self):
         self.renderThread.reloadObject(characterinfo.CharacterInfo)
