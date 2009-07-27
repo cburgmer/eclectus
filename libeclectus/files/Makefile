@@ -1,7 +1,7 @@
 chi-balm-hsk1_ogg:
 	wget http://download.shtooka.net/chi-balm-hsk1_ogg.tar
 	tar -xf chi-balm-hsk1_ogg.tar
-	../buildtables.py -rb Pronunciation_zh_cmn
+	../buildtables.py -r build Pronunciation_zh_cmn
 
 bw.png:
 	mkdir -p commons.tmp
