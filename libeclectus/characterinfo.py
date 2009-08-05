@@ -2269,8 +2269,10 @@ class CharacterInfo:
                 self.dictionaryTable.c.Translation],
                 self.dictionaryTable.c.Translation.like(
                     ' '.join(translationTokens)),
-                distinct=True).order_by(*orderBy))
+                distinct=True))
+                #distinct=True).order_by(*orderBy))
 
+        # TODO orderby
         #result = self.db.selectRows(
             #union(*selectQueries).limit(limit).order_by(*orderBy))
         result = self.db.selectRows(
