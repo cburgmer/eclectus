@@ -609,7 +609,7 @@ class DictionaryDownloader:
             _, _, onlinePath, _, _ = urlparse.urlsplit(
                 self.getDownloadLink())
             fileType = None
-            matchObj = re.search('\.(zip|tar|tar\.bz2|tar\.gz|txt)$',
+            matchObj = re.search('\.(zip|tar|tar\.bz2|tar\.gz|gz|txt)$',
                 onlinePath)
             if matchObj:
                 fileType = matchObj.group(0)
