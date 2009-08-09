@@ -57,11 +57,11 @@ class CharacterInfo:
     """Character locale's default character reading."""
 
     DICTIONARY_INFO = {
-        'HanDeDict': ('CEDICT', 'Pinyin', {'toneMarkType': 'Numbers'}, 'zh-cmn',
+        'HanDeDict': ('CEDICT', 'Pinyin', {'toneMarkType': 'numbers'}, 'zh-cmn',
             'de', lambda entities: ' '.join(entities)),
-        'CFDICT': ('CEDICT', 'Pinyin', {'toneMarkType': 'Numbers'}, 'zh-cmn',
+        'CFDICT': ('CEDICT', 'Pinyin', {'toneMarkType': 'numbers'}, 'zh-cmn',
             'de', lambda entities: ' '.join(entities)),
-        'CEDICT': ('CEDICT', 'Pinyin', {'toneMarkType': 'Numbers'}, 'zh-cmn',
+        'CEDICT': ('CEDICT', 'Pinyin', {'toneMarkType': 'numbers'}, 'zh-cmn',
             'en', lambda entities: ' '.join(entities)),
         'CEDICTGR': ('EDICT', 'GR', {}, 'zh-cmn-Hant', 'en',
             lambda entities: ' '.join(entities)),

@@ -1050,7 +1050,7 @@ class ChineseLessonsComMandarinPronunciation(GlobbingPronunciationBuilder):
         fileRoot, _ = os.path.splitext(fileName)
         try:
             return self.readingFactory.convert(fileRoot, 'Pinyin', 'Pinyin',
-                sourceOptions={'toneMarkType': 'Numbers'})
+                sourceOptions={'toneMarkType': 'numbers'})
         except exception.UnsupportedError:
             pass
         except exception.ConversionError:
