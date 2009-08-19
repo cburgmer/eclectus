@@ -650,7 +650,7 @@ class HanDeDictDownloader(DictionaryDownloader):
 
 
 class CFDICTDownloader(DictionaryDownloader):
-    DOWNLOADER_NAME = 'CFDict'
+    DOWNLOADER_NAME = 'CFDICT'
     DEFAULT_DOWNLOAD_PAGE = u'http://www.chinaboard.de/cfdict.php?mode=dl'
     DOWNLOAD_REGEX = re.compile(u'<a href="(cfdict/cfdict-(?:\d+).tar.bz2)">')
 
@@ -699,7 +699,7 @@ class CEDICTGRDownloader(DictionaryDownloader):
 
 
 class EDICTDownloader(DictionaryDownloader):
-    DOWNLOADER_NAME = 'CEDICT'
+    DOWNLOADER_NAME = 'EDICT'
     DOWNLOAD_LINK = u'http://ftp.monash.edu.au/pub/nihongo/edict.gz'
 
     def getDownloadPageContent(self):

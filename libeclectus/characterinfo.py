@@ -172,22 +172,14 @@ class CharacterInfo:
     """
 
     def __init__(self, language=None, readingN=None, dictionary=None,
-                characterDomain=None):
+        characterDomain=None):
         """
         Initialises the CharacterInfo object.
 
         @type locale: character
         @param locale: I{character locale} (one out of TCJKV)
-        @todo Impl: Test if character domain exists before applying
         """
-        #self.db.engine.echo = True
-
         self.db = DatabaseConnector.getDBConnector()
-
-        if characterDomain:
-            self.characterDomain = characterDomain # TODO Test if character domain exists before applying
-        else:
-            self.characterDomain = 'Unicode'
 
         self.availableDictionaries = None
 
@@ -213,10 +205,18 @@ class CharacterInfo:
 
         self.locale = self.LANGUAGE_CHAR_LOCALE_MAPPING[self.language]
 
-        self.characterLookup = characterlookup.CharacterLookup(self.locale,
-            self.characterDomain)
-        self.characterLookupTraditional = characterlookup.CharacterLookup('T',
-            self.characterDomain)
+        self.characterLookup = characterlookup.CharacterLookup(self.locale)
+        self.characterLookupTraditional = characterlookup.CharacterLookup('T')
+
+        # character domain
+        if characterDomain and characterDomain \
+            in self.characterLookup.getAvailableCharacterDomains():
+            self.characterDomain = characterDomain
+        else:
+            self.characterDomain = 'Unicode'
+        self.characterLookup.setCharacterDomain(self.characterDomain)
+        self.characterLookupTraditional.setCharacterDomain(self.characterDomain)
+
         self.readingFactory = reading.ReadingFactory()
 
         # get incompatible reading conversions

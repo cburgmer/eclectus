@@ -54,7 +54,7 @@ try:
         from distutils import version
         cjklibVersion = version.LooseVersion(cjklib.__version__)
         if cjklibVersion != '0.1alpha' \
-            and cjklibVersion < version.LooseVersion('0.1alpha-svn20090808'):
+            and cjklibVersion < version.LooseVersion('0.1alpha-svn20090816'):
             import logging
             logging.warn('Your cjklib version is too old.' \
                 + ' You might experience difficulties!')

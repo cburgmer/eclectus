@@ -1320,7 +1320,7 @@ class HtmlView:
         else:
             htmlList.append('<table class="searchResult">')
             for strokeCount in sorted(characterGroups[None].keys()):
-                if type(strokeCount) != type(0):
+                if type(strokeCount) not in (type(0), type(0L)):
                     # sort out non stroke count groups
                     continue
 
