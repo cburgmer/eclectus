@@ -261,6 +261,15 @@ body.wordaday object
     width: 258px;
 }
 
+div.components
+{
+}
+
+div.components * .translation
+{
+    font-size: 80%;
+}
+
 /* Stroke order */
 
 .strokeorder

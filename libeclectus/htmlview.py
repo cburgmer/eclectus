@@ -51,7 +51,7 @@ class HtmlView:
         'zh-cmn-Hans': ['getCEDICTLink', 'getHanDeDictLink', 'getDictCNLink'],
         'ja': [],
         'ko': [],
-        'zh-yue': [],
+        'zh-yue': ['getCantoDictLink'],
         'ja': ['getWWWJDICLink'],
         }
     """Links to websites for a given character string."""
@@ -461,6 +461,11 @@ class HtmlView:
         link = u'http://dict.cn/%s.htm' % charString
         return link, u'海词词典 (Dict.cn)' # not i18n-able
 
+    def getCantoDictLink(self, charString):
+        link = u'http://www.cantonese.sheik.co.uk/dictionary/search/' \
+            + '?searchtype=1&text=%s' % charString
+        return link, i18n('CantoDict Cantonese-Mandarin-English dictionary')
+
     def getLinkSection(self, inputString):
         functions = []
         if self.charInfo.language in self.WEB_LINKS:
@@ -836,48 +841,55 @@ class HtmlView:
 
         return '\n'.join(htmlList)
 
+    def _getDictionaryInfo(self, char):
+        readings = []
+        translations = []
+        if self.charInfo.dictionary:
+            dictResult = self.charInfo.searchDictionaryExactHeadword(char)
+            if not dictResult:
+                return ''
+
+            # separate readings from translation
+            for _, _, reading, translation in dictResult:
+                if reading not in readings:
+                    readings.append(reading)
+                if translation not in translations:
+                    translations.append(
+                        self._getTranslationRepresentation(translation))
+
+        if not self.charInfo.dictionary or self.useExtraReadingInformation:
+            for reading in self.charInfo.getReadingForCharacter(char):
+                if reading not in readings:
+                    readings.append(reading)
+
+        return ' <span class="reading">%s</span>' % ', '.join(readings) \
+            + ' <span class="translation">%s</span>' \
+                % ' / '.join(translations)
+
     def getCharacterWithComponentSection(self, inputString):
         """Gets a list of characters with the given character as component."""
         chars = self.charInfo.getCharactersForComponents([inputString])
 
+        if inputString in chars:
+            chars.remove(inputString)
+
         if chars:
             characterLinks = []
             for char in chars:
-                characterLinks.append(
-                    '<a class="character" href="#lookup(%s)">%s</a>' \
-                        % (util.encodeBase64(char), char))
-            return '<span class="character">%s</span>' \
+                #characterLinks.append(
+                    #'<a class="character" href="#lookup(%s)">%s</a>' \
+                        #% (util.encodeBase64(char), char))
+                characterLinks.append('<li><span class="character">' \
+                    + '<a class="character" href="#lookup(%s)">%s</a>' \
+                        % (util.encodeBase64(char),  char) \
+                    + '</span>%s</li>' % self._getDictionaryInfo(char))
+            return '<div class="components"><ul>%s</ul></div>' \
                 % ' '.join(characterLinks)
         else:
             return '<span class="meta">%s</span>' % i18n('No entries found')
 
     def getDecompositionTreeSection(self, inputString):
         """Gets a tree of components included in the given character."""
-        def getDictionaryInfo(char):
-            readings = []
-            translations = []
-            if self.charInfo.dictionary:
-                dictResult = self.charInfo.searchDictionaryExactHeadword(char)
-                if not dictResult:
-                    return ''
-
-                # separate readings from translation
-                for _, _, reading, translation in dictResult:
-                    if reading not in readings:
-                        readings.append(reading)
-                    if translation not in translations:
-                        translations.append(
-                            self._getTranslationRepresentation(translation))
-
-            if not self.charInfo.dictionary or self.useExtraReadingInformation:
-                for reading in self.charInfo.getReadingForCharacter(char):
-                    if reading not in readings:
-                        readings.append(reading)
-
-            return ' <span class="reading">%s</span>' % ', '.join(readings) \
-                + ' <span class="translation">%s</span>' \
-                    % ' / '.join(translations)
-
         def getLayer(decompTree, isSubTree=False):
             if type(decompTree) != type(()):
                 char = decompTree
@@ -891,7 +903,7 @@ class HtmlView:
                         return '<span class="entry"><span class="character">' \
                             + '<a class="character" href="#lookup(%s)">%s</a>' \
                                 % (util.encodeBase64(char),  char) \
-                            + '</span>%s</span>' % getDictionaryInfo(char)
+                            + '</span>%s</span>' % self._getDictionaryInfo(char)
                 else:
                     return '<span class="entry meta">%s</span>' \
                         % i18n('unknown')
@@ -903,7 +915,7 @@ class HtmlView:
                             + '<a class="character" href="#lookup(%s)">%s</a>' \
                                 % (util.encodeBase64(char),  char) \
                             + '</span>' \
-                            + getDictionaryInfo(char)
+                            + self._getDictionaryInfo(char)
                     else:
                         # don't show dictionary information for the root element
                         head = layout \
