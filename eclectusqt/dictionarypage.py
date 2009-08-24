@@ -24,7 +24,7 @@ import functools
 
 from PyQt4.QtCore import Qt, SIGNAL, QObject, QVariant, QUrl
 from PyQt4.QtGui import QWidget, QApplication, QDesktopServices, QIcon, QAction
-from PyQt4.QtGui import QClipboard, QDialog
+from PyQt4.QtGui import QClipboard, QDialog, QPrinter, QPrintDialog
 from PyQt4.QtWebKit import QWebView, QWebPage
 try:
     from PyQt4.phonon import Phonon
@@ -414,6 +414,10 @@ function _go() { }
             self.connect(toggleAction, SIGNAL("toggled(bool)"),
                 functools.partial(self.sectionSelectionChanged, idx))
 
+        # print action
+        self._printAction = KStandardAction.print_(self.slotPrint,
+            self.actionCollection)
+
     def bridgeWebAction(self, webActionName, standardAction):
         webAction = self.pageAction(webActionName)
         action = standardAction(
@@ -541,6 +545,11 @@ function _go() { }
         actionCollection.addAction(self._sectionChooserAction.objectName(),
             self._sectionChooserAction)
         return self._sectionChooserAction
+
+    def printAction(self, actionCollection):
+        actionCollection.addAction(self._printAction.objectName(),
+            self._printAction)
+        return self._printAction
 
     def slotLinkClicked(self, url):
         cmd = unicode(url.toString()).replace('about:blank#', '')
@@ -692,6 +701,13 @@ function _go() { }
             action = QAction(title, popup)
             action.setData(QVariant(idx))
             popup.addAction(action)
+
+    def slotPrint(self):
+        printer = QPrinter(QPrinter.HighResolution)
+
+        dialog = QPrintDialog(printer, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self.print_(printer)
 
     def slotPageLoaded(self, ok):
         if self.history.current() in self.scrollValues:

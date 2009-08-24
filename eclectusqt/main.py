@@ -254,6 +254,7 @@ class MainWindow(KXmlGuiWindow):
             self.actionCollection())
         self.lookupClipboardAction.setGlobalShortcut(
             KShortcut(Qt.CTRL + Qt.ALT + Qt.Key_N))
+        self.dictionaryPage.printAction(self.actionCollection())
 
         # update dictionaries
         self.updateAction = self.updateDialog.updateAction(
