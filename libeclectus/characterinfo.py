@@ -2371,6 +2371,24 @@ class CharacterInfo:
 
         return []
 
+    def searchDictionarySamePronunciationAs(self, searchString):
+        """
+        Searches the dictionary for all characters that have the same reading
+        as the given headword.
+        """
+        tableA = self.dictionaryTable.alias('a')
+        tableB = self.dictionaryTable.alias('b')
+        fromObj = tableA.join(tableB, and_(tableA.c.Reading == tableB.c.Reading,
+            tableA.c[self.headwordColumn] != tableB.c[self.headwordColumn]))
+        result = self.db.selectRows(select(
+            [tableA.c[self.headwordColumn],
+            tableA.c[self.headwordAlternativeColumn].label('a'),
+            tableA.c.Reading, tableA.c.Translation],
+            tableB.c[self.headwordColumn] == searchString,
+            from_obj=fromObj, distinct=True).order_by(tableA.c.Translation))
+
+        return self.convertDictionaryResult(result)
+
     def getRandomDictionaryEntry(self):
         """
         Gets a random dictinonary entry.

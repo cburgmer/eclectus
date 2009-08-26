@@ -32,6 +32,12 @@ h2
     font-size: 1.2em;
 }
 
+h3
+{
+    margin-bottom: 0.1em;
+    font-size: 1.0em;
+}
+
 th, td
 {
     vertical-align: top;
@@ -266,6 +272,15 @@ div.components
 }
 
 div.components * .translation
+{
+    font-size: 80%;
+}
+
+div.samereading
+{
+}
+
+div.samereading * .translation
 {
     font-size: 80%;
 }

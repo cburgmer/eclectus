@@ -127,6 +127,8 @@ class DictionaryPage(QWebView):
         'getStrokeOrderSection': i18n('Stroke order'),
         'getLinkSection': i18n('Links'),
         'getCharacterWithComponentSection': i18n('Characters including glyph'),
+        'getCharacterWithSamePronunciationSection':
+                i18n('Characters with same pronunciation'),
         'getHeadwordContainedCharactersSection': i18n('Single characters'),
         'getDecompositionTreeSection': i18n('Character structure'),
         #'getCombinedContainedVocabularySection': i18n('Contained vocabulary'), # TODO
@@ -136,7 +138,7 @@ class DictionaryPage(QWebView):
             'getVariantSection', 'getMeaningSection',
             'getVocabularySection', 'getStrokeOrderSection',
             'getDecompositionTreeSection', 'getCharacterWithComponentSection',
-            'getLinkSection'],
+            'getCharacterWithSamePronunciationSection', 'getLinkSection'],
         'word': ['getGeneralWordSection', 'getVariantSection',
             'getMeaningSection', 'getHeadwordContainedCharactersSection',
             'getVocabularySection', 'getLinkSection'],
@@ -157,6 +159,7 @@ class DictionaryPage(QWebView):
 
     DEFAULT_SECTION_CONTENT_VISIBILITY = {'getMeaningSection': True,
         'getVocabularySection': True, 'getCharacterWithComponentSection': False,
+        'getCharacterWithSamePronunciationSection': False,
         'getHeadwordContainedCharactersSection': True,
         'getLinkSection': True,
         'getDecompositionTreeSection': True, 'getStrokeOrderSection': True,

@@ -531,6 +531,10 @@ class HtmlView:
             if filePath:
                 audioHtml = ' <a class="audio" href="#play(%s)">%s</a>' \
                     % (urllib.quote(filePath.encode('utf8')), i18n('Listen'))
+                #audioHtml = ' <a class="audio" href="#" onclick="new Audio(\'%s\').play(); return false;">%s</a>' \
+                    #% (urllib.quote(filePath.encode('utf8')), i18n('Listen'))
+                #audioHtml = ' <audio src="%s" id="audio_%s" autoplay=false></audio><a class="audio" href="#" onClick="document.getElementById(\'audio_%s\').play(); return false;">%s</a>' \
+                    #% (urllib.quote(filePath.encode('utf8')), reading, reading, i18n('Listen'))
             else:
                 audioHtml = ''
             return filePath, audioHtml
@@ -841,23 +845,24 @@ class HtmlView:
 
         return '\n'.join(htmlList)
 
-    def _getDictionaryInfo(self, char):
+    def _getDictionaryInfo(self, char, dictResult=None):
         readings = []
         translations = []
-        if self.charInfo.dictionary:
+        addReadings = dictResult == None
+        if not dictResult and self.charInfo.dictionary:
             dictResult = self.charInfo.searchDictionaryExactHeadword(char)
-            if not dictResult:
-                return ''
 
+        if dictResult:
             # separate readings from translation
             for _, _, reading, translation in dictResult:
                 if reading not in readings:
                     readings.append(reading)
-                if translation not in translations:
+                if translation and translation not in translations:
                     translations.append(
                         self._getTranslationRepresentation(translation))
 
-        if not self.charInfo.dictionary or self.useExtraReadingInformation:
+        if (not self.charInfo.dictionary or self.useExtraReadingInformation) \
+            and addReadings:
             for reading in self.charInfo.getReadingForCharacter(char):
                 if reading not in readings:
                     readings.append(reading)
@@ -939,6 +944,57 @@ class HtmlView:
             return '<div class="tree">%s</div>' % getLayer(decompTree)
         else:
             return '<span class="meta">%s</span>' % i18n('No entry found')
+
+    def getCharacterWithSamePronunciationSection(self, inputString):
+        """Gets a list of characters with the same pronunciation."""
+        if self.charInfo.dictionary:
+            dictResult = self.charInfo.searchDictionarySamePronunciationAs(
+                inputString)
+
+            # group by reading and character
+            charDict = {}
+            for char, charAlt, reading, translation in dictResult:
+                if reading not in charDict:
+                    charDict[reading] = {}
+                if char not in charDict[reading]:
+                    charDict[reading][char] = []
+                charDict[reading][char].append(
+                    (char, charAlt, reading, translation))
+
+        else:
+            charDict = {}
+
+        if not self.charInfo.dictionary or self.useExtraReadingInformation:
+            # augment with results from Unihan
+            for reading in self.charInfo.getReadingForCharacter(inputString):
+                charResults = self.charInfo.getCharactersForReading(reading)
+                chars = [char for char, _ in charResults if char != inputString]
+
+                if chars:
+                    # group by reading and character
+                    if reading not in charDict:
+                        charDict[reading] = {}
+                    for char in chars:
+                        if char not in charDict[reading]:
+                            charDict[reading][char] \
+                                = [(char, char, reading, None)]
+
+        if charDict:
+            html = ''
+            for reading in sorted(charDict.keys(), reverse=True):
+                characterLinks = []
+                for char in charDict[reading]:
+                    characterLinks.append('<li><span class="character">' \
+                        + '<a class="character" href="#lookup(%s)">%s</a>' \
+                            % (util.encodeBase64(char),  char) \
+                        + '</span>%s</li>' % self._getDictionaryInfo(char,
+                            charDict[reading][char]))
+                html += '<h3>%s</h3>' % reading \
+                    + '<ul>%s</ul>' % ' '.join(characterLinks)
+
+            return '<div class="samereading">' + html + '</div>'
+        else:
+            return '<span class="meta">%s</span>' % i18n('No entries found')
 
     def getCharacterPronunciationSearchSection(self, inputString):
         """
