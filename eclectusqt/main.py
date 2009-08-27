@@ -713,6 +713,11 @@ class MainWindow(KXmlGuiWindow):
         # dictionary page changed
         self.emit(SIGNAL("pageRequested(const QString &)"), pageName)
 
+        # Temporarily hide default internal pageTypes
+        if unicode(pageName).count(':'):
+            pageType, page = unicode(pageName).split(':')
+        if pageType in ['character', 'word']:
+            pageName = page
         self.characterCombo.setEditText(pageName) # TODO mask page type
 
     def slotVocabularyAdded(self, headword, reading, translation, audio):

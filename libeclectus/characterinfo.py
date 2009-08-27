@@ -96,7 +96,7 @@ class CharacterInfo:
     Dictionary of tonal readings with reading options to remove tonal features.
     """
 
-    READING_OPTIONS = {'WadeGiles': {'toneMarkType': 'SuperscriptNumbers'}}
+    READING_OPTIONS = {'WadeGiles': {'toneMarkType': 'superscriptNumbers'}}
     """Special reading options for output."""
 
     SPECIAL_TONAL_READINGS = ['GR']
@@ -578,9 +578,8 @@ class CharacterInfo:
         return ''.join(entityList)
 
     def joinReadingEntitiesWC(self, entities):
-        dictType, _, _, _, _, _ = self.DICTIONARY_INFO[self.dictionary]
         # TODO bad implementation
-        if dictType == 'EDICT':
+        if self.dictionary == 'EDICT':
             readingString = ''.join(entities)
         else:
             readingString = self.joinReadingEntities(entities)
