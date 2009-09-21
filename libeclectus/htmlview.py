@@ -21,10 +21,12 @@ import os
 import os.path
 import re
 import urllib
-
-from PyKDE4.kdecore import i18n, i18np
+import gettext
 
 from libeclectus import util
+#from libeclectus.util import _, ngettext
+
+gettext = ngettext = None
 
 class HtmlView:
     FILE_PATHS = {'default': [u'/usr/share/eclectus'],
@@ -79,7 +81,8 @@ class HtmlView:
     """Methods that need a dictionary present to work."""
 
     def __init__(self, charInfo, strokeOrderType=None,
-        showAlternativeHeadwords=True, useExtraReadingInformation=False):
+        showAlternativeHeadwords=True, useExtraReadingInformation=False,
+        localLanguage=None):
         self.charInfo = charInfo
         self.showAlternativeHeadwords = showAlternativeHeadwords
         self.useExtraReadingInformation = useExtraReadingInformation
@@ -101,6 +104,11 @@ class HtmlView:
                 self.strokeOrderType = availableStrokeOrder[0]
             else:
                 self.strokeOrderType = None
+
+        t = util.getTranslation(localLanguage)
+        global gettext, ngettext
+        gettext = t.ugettext
+        ngettext = t.ungettext
 
     @classmethod
     def locatePath(cls, name):
@@ -432,7 +440,7 @@ class HtmlView:
         if strokeOrder:
             return '<span class="bigstrokeorder">%s</span>' % strokeOrder
         else:
-            return '<span class="meta">%s</span>' % i18n('no information')
+            return '<span class="meta">%s</span>' % gettext('no information')
 
     # LINK SECTION
 
@@ -440,22 +448,22 @@ class HtmlView:
         if len(charString) == 1:
             link = u'http://www.unicode.org/cgi-bin/GetUnihanData.pl?' \
                 + u'codepoint=%s' % hex(ord(charString)).replace('0x', '')
-            return link, i18n('Unicode Unihan database')
+            return link, gettext('Unicode Unihan database')
 
     def getWWWJDICLink(self, charString):
         link = u'http://www.csse.monash.edu.au/~jwb/cgi-bin/' \
             + u'wwwjdic.cgi?1MUJ%s' % charString
-        return link, i18n('WWWJDIC Japanese-English dictionary')
+        return link, gettext('WWWJDIC Japanese-English dictionary')
 
     def getCEDICTLink(self, charString):
         link = u'http://us.mdbg.net/chindict/chindict.php?wdqchs=%s' \
             % charString
-        return link, i18n('MDBG Chinese-English dictionary')
+        return link, gettext('MDBG Chinese-English dictionary')
 
     def getHanDeDictLink(self, charString):
         link = u'http://www.chinaboard.de/chinesisch_deutsch.php?' \
             + u"sourceid=konqueror-search&skeys=%s" % charString
-        return link, i18n('HanDeDict Chinese-German dictionary')
+        return link, gettext('HanDeDict Chinese-German dictionary')
 
     def getDictCNLink(self, charString):
         link = u'http://dict.cn/%s.htm' % charString
@@ -464,7 +472,7 @@ class HtmlView:
     def getCantoDictLink(self, charString):
         link = u'http://www.cantonese.sheik.co.uk/dictionary/search/' \
             + '?searchtype=1&text=%s' % charString
-        return link, i18n('CantoDict Cantonese-Mandarin-English dictionary')
+        return link, gettext('CantoDict Cantonese-Mandarin-English dictionary')
 
     def getLinkSection(self, inputString):
         functions = []
@@ -507,7 +515,7 @@ class HtmlView:
         else:
             return '<div class="variantSection">'\
                 + '<span class="meta">%s</span> ' \
-                    % i18np("See variant:", "See variants:", len(variants)) \
+                    % ngettext("See variant:", "See variants:", len(variants)) \
                 + ', '.join(variantLinks) \
                 + '</div>'
 
@@ -530,11 +538,11 @@ class HtmlView:
                     filePath = path
             if filePath:
                 audioHtml = ' <a class="audio" href="#play(%s)">%s</a>' \
-                    % (urllib.quote(filePath.encode('utf8')), i18n('Listen'))
+                    % (urllib.quote(filePath.encode('utf8')), gettext('Listen'))
                 #audioHtml = ' <a class="audio" href="#" onclick="new Audio(\'%s\').play(); return false;">%s</a>' \
-                    #% (urllib.quote(filePath.encode('utf8')), i18n('Listen'))
+                    #% (urllib.quote(filePath.encode('utf8')), gettext('Listen'))
                 #audioHtml = ' <audio src="%s" id="audio_%s" autoplay=false></audio><a class="audio" href="#" onClick="document.getElementById(\'audio_%s\').play(); return false;">%s</a>' \
-                    #% (urllib.quote(filePath.encode('utf8')), reading, reading, i18n('Listen'))
+                    #% (urllib.quote(filePath.encode('utf8')), reading, reading, gettext('Listen'))
             else:
                 audioHtml = ''
             return filePath, audioHtml
@@ -649,7 +657,7 @@ class HtmlView:
             htmlList.append('</table>')
         elif self.charInfo.dictionary:
             htmlList.append('<span class="meta">%s</span>' \
-                % i18n('No dictionary entries found'))
+                % gettext('No dictionary entries found'))
 
         # show pronunciations not included in dictionary
         if otherPronunciations:
@@ -670,9 +678,9 @@ class HtmlView:
                             util.encodeBase64(filePath)) \
                     + '</a>')
             if readings:
-                label = i18n('Other pronunciations:')
+                label = gettext('Other pronunciations:')
             else:
-                label = i18n('Pronunciations:')
+                label = gettext('Pronunciations:')
             htmlList.append('<p>' \
                 + '<span class="meta">%s</span> ' % label \
                 + '<span class="reading">%s</span>' \
@@ -680,7 +688,7 @@ class HtmlView:
                 + '</p>')
         elif not self.charInfo.dictionary:
             htmlList.append('<span class="meta">%s</span>' \
-                % i18n('No entries found'))
+                % gettext('No entries found'))
 
         return '\n'.join(htmlList)
 
@@ -719,7 +727,7 @@ class HtmlView:
 
             else:
                 htmlList.append('<span class="meta">%s</span>' \
-                    % i18n('No entries found'))
+                    % gettext('No entries found'))
         else:
             characterWiseReading \
                 = self.charInfo.getReadingForCharString(inputString)
@@ -741,7 +749,7 @@ class HtmlView:
                 htmlList.append('</table>')
             else:
                 htmlList.append('<span class="meta">%s</span>' \
-                    % i18n('No entries found'))
+                    % gettext('No entries found'))
 
         return '\n'.join(htmlList)
 
@@ -793,11 +801,11 @@ class HtmlView:
             if len(dictResult) > 4:
                 htmlList.append(
                     '<a class="meta" href="#lookup(%s)">%s</a>' \
-                        % (util.encodeBase64(unicode(i18n('vocabulary')) + ':' \
-                            + inputString), i18n('All entries...')))
+                        % (util.encodeBase64('vocabulary' \
+                            + ':' + inputString), gettext('All entries...')))
         else:
             htmlList.append('<span class="meta">%s</span>' \
-                % i18n('No entries found'))
+                % gettext('No entries found'))
 
         return '\n'.join(htmlList)
 
@@ -816,7 +824,7 @@ class HtmlView:
 
         # exact matches
         htmlList.append('<tr><td colspan="3"><h3>%s</h3></td></tr>' \
-            % i18n('Dictionary entries'))
+            % gettext('Dictionary entries'))
         if dictResult:
             showAlternative = lambda charString, _: (charString != inputString)
             htmlList.append(self._getVocabularyTable(dictResult,
@@ -824,7 +832,7 @@ class HtmlView:
         else:
             htmlList.append(
                 '<tr><td colspan="3"><span class="meta">%s</span></td></tr>' \
-                    % i18n('No exact matches found'))
+                    % gettext('No exact matches found'))
 
         # other matches
         dictResult = self.charInfo.searchDictionaryContainingHeadword(
@@ -832,7 +840,7 @@ class HtmlView:
 
         if dictResult:
             htmlList.append('<tr><td colspan="3"><h3>%s</h3></td></tr>' \
-                % i18n('Other matches'))
+                % gettext('Other matches'))
 
             # don't display alternative if the charString is found in the
             #   given string
@@ -891,7 +899,7 @@ class HtmlView:
             return '<div class="components"><ul>%s</ul></div>' \
                 % ' '.join(characterLinks)
         else:
-            return '<span class="meta">%s</span>' % i18n('No entries found')
+            return '<span class="meta">%s</span>' % gettext('No entries found')
 
     def getDecompositionTreeSection(self, inputString):
         """Gets a tree of components included in the given character."""
@@ -911,7 +919,7 @@ class HtmlView:
                             + '</span>%s</span>' % self._getDictionaryInfo(char)
                 else:
                     return '<span class="entry meta">%s</span>' \
-                        % i18n('unknown')
+                        % gettext('unknown')
             else:
                 layout, char, tree = decompTree
                 if char:
@@ -943,7 +951,7 @@ class HtmlView:
             seenEntry = set()
             return '<div class="tree">%s</div>' % getLayer(decompTree)
         else:
-            return '<span class="meta">%s</span>' % i18n('No entry found')
+            return '<span class="meta">%s</span>' % gettext('No entry found')
 
     def getCharacterWithSamePronunciationSection(self, inputString):
         """Gets a list of characters with the same pronunciation."""
@@ -994,7 +1002,7 @@ class HtmlView:
 
             return '<div class="samereading">' + html + '</div>'
         else:
-            return '<span class="meta">%s</span>' % i18n('No entries found')
+            return '<span class="meta">%s</span>' % gettext('No entries found')
 
     def getCharacterPronunciationSearchSection(self, inputString):
         """
@@ -1029,19 +1037,19 @@ class HtmlView:
         similarChars = self.charInfo.getCharactersForSimilarReading(inputString)
         if similarChars:
             htmlList.append('<tr><td colspan="2"><h3>%s</h3></td></tr>' \
-                % i18n('Similar pronunciations'))
+                % gettext('Similar pronunciations'))
             fillTable(similarChars)
 
         if not exactChars:
             if not similarChars:
                 htmlList.append('<tr><td colspan="3">'\
                     + '<span class="meta">%s</span>' \
-                        % i18n('No matches found') \
+                        % gettext('No matches found') \
                     + '</td></tr>')
             else:
                 htmlList.insert(0, '<tr><td colspan="3">'\
                     + '<span class="meta">%s</span>' \
-                        % i18n('No exact matches found') \
+                        % gettext('No exact matches found') \
                     + '</td></tr>')
         htmlList.append('</table>')
 
@@ -1084,7 +1092,7 @@ class HtmlView:
 
         if exactDictResult:
             htmlList.append('<tr><td colspan="3"><h3>%s</h3></td></tr>' \
-                % i18n('Matches'))
+                % gettext('Matches'))
             # match against input string with regular expression
             htmlList.append(self._getVocabularyTable(exactDictResult,
                 useAltFunc=lambda x, y: \
@@ -1104,21 +1112,21 @@ class HtmlView:
 
         if similarDictResult:
             htmlList.append('<tr><td colspan="3"><h3>%s</h3></td></tr>' \
-                % i18n('Similar pronunciations'))
+                % gettext('Similar pronunciations'))
             htmlList.append(self._getVocabularyTable(similarDictResult[:4]))
 
             if len(similarDictResult) > 4:
                 htmlList.append('<tr><td colspan="3">' \
                     + '<a class="meta" href="#lookup(%s)">%s</a>' \
-                        % (util.encodeBase64(i18n('similar') + ':' \
-                            + inputString), i18n('All entries...'))
+                        % (util.encodeBase64('similar' + ':' \
+                            + inputString), gettext('All entries...'))
                     + '</td></tr>')
 
 
         # other matches
         if otherDictResult:
             htmlList.append('<tr><td colspan="3"><h3>%s</h3></td></tr>' \
-                % i18n('Other matches'))
+                % gettext('Other matches'))
             augmentedInput = '*' + inputString + '*'
             htmlList.append(self._getVocabularyTable(otherDictResult[:4],
                 useAltFunc=lambda x, y: \
@@ -1128,8 +1136,8 @@ class HtmlView:
             if len(otherDictResult) > 4:
                 htmlList.append('<tr><td colspan="3">' \
                     + '<a class="meta" href="#lookup(%s)">%s</a>' \
-                        % (util.encodeBase64(i18n('othervocabulary') + ':' \
-                            + inputString), i18n('All entries...'))
+                        % (util.encodeBase64('othervocabulary' + ':' \
+                            + inputString), gettext('All entries...'))
                     + '</td></tr>')
 
         # handle 0 result cases
@@ -1137,12 +1145,12 @@ class HtmlView:
             if not similarDictResult and not otherDictResult:
                 htmlList.append('<tr><td colspan="3">'\
                     + '<span class="meta">%s</span>' \
-                        % i18n('No matches found') \
+                        % gettext('No matches found') \
                     + '</td></tr>')
             else:
                 htmlList.insert(0, '<tr><td colspan="3">'\
                     + '<span class="meta">%s</span>' \
-                        % i18n('No exact matches found') \
+                        % gettext('No exact matches found') \
                     + '</td></tr>')
 
         htmlList.append('</table>')
@@ -1165,7 +1173,7 @@ class HtmlView:
         if dictResult:
             htmlList.append('<table class="otherVocabulary">')
             htmlList.append('<tr><td colspan="3"><h3>%s</h3></td></tr>' \
-                % i18n('Other matches'))
+                % gettext('Other matches'))
             augmentedInput = '*' + inputString + '*'
             htmlList.append(self._getVocabularyTable(dictResult,
                 useAltFunc=lambda x, y: \
@@ -1175,7 +1183,7 @@ class HtmlView:
 
         else:
             htmlList.append('<span class="meta">%s</span>' \
-                    % i18n('No matches found'))
+                    % gettext('No matches found'))
 
         return '\n'.join(htmlList)
 
@@ -1212,13 +1220,13 @@ class HtmlView:
         if dictResult:
             htmlList.append('<table class="similarVocabulary">')
             htmlList.append('<tr><td colspan="3"><h3>%s</h3></td></tr>' \
-                % i18n('Similar pronunciations'))
+                % gettext('Similar pronunciations'))
             htmlList.append(self._getVocabularyTable(dictResult))
             htmlList.append('</table>')
 
         else:
             htmlList.append('<span class="meta">%s</span>' \
-                % i18n('No matches found'))
+                % gettext('No matches found'))
 
         return '\n'.join(htmlList)
 
@@ -1286,7 +1294,7 @@ class HtmlView:
                         % (util.encodeBase64(char), char))
             html = '<span class="character">%s</span>' % ' '.join(charLinks)
         else:
-            html = '<p class="meta">%s</p>' % i18n('No entries')
+            html = '<p class="meta">%s</p>' % gettext('No entries')
 
         return html, len(chars)
 
@@ -1308,7 +1316,8 @@ class HtmlView:
                     '<tr class="strokeCount" id="strokecount%d">' \
                         % strokeCount \
                     + '<td colspan="3"><h2>%s</h2></td>' \
-                        % i18np('1 stroke', '%1 strokes', strokeCount)
+                        % (ngettext('%(strokes)d stroke', '%(strokes)d strokes',
+                            strokeCount) % {'strokes': strokeCount})
                     + '</tr>')
 
             htmlList.append(
@@ -1361,7 +1370,9 @@ class HtmlView:
         htmlList = []
 
         # show main radical form
-        htmlList.append('<h3>%s</h3>' % i18n('Radical %1', str(radicalIndex)))
+        htmlList.append('<h3>%s</h3>' \
+            % (gettext('Radical %(radical_index)d') \
+                % {'radical_index': radicalIndex}))
 
         charLinks = []
         for strokeCount in sorted(characterGroups['radical'].keys()):
@@ -1377,14 +1388,15 @@ class HtmlView:
         _, strokeCount, _, _ = radicalForms[radicalIndex]
         if strokeCount:
             htmlList.append(' (%s)' \
-                % i18np('1 stroke', '%1 strokes', strokeCount))
+                % (ngettext('%(strokes)d stroke', '%(strokes)d strokes',
+                    strokeCount) % {'strokes': strokeCount}))
 
-        htmlList.append('<h3>%s</h3>' % i18n('Characters'))
+        htmlList.append('<h3>%s</h3>' % gettext('Characters'))
 
         # list sorted by residual stroke count
         if not characterGroups[None]:
             htmlList.append('<span class="meta">%s</span>' \
-                % i18n('no results found for the selected character domain'))
+                % gettext('no results found for the selected character domain'))
         else:
             htmlList.append('<table class="searchResult">')
             for strokeCount in sorted(characterGroups[None].keys()):
@@ -1407,7 +1419,7 @@ class HtmlView:
             # Add characters without stroke count information
             if None in characterGroups[None]:
                 htmlList.append('<tr>' \
-                    + '<th class="strokeCount">%s</th><td>' % i18n('Unknown'))
+                    + '<th class="strokeCount">%s</th><td>' % gettext('Unknown'))
                 charLinks = []
                 for char in sorted(characterGroups[None][None]):
                     charLinks.append('<span class="character">' \

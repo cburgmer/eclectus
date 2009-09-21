@@ -33,6 +33,7 @@ from eclectusqt.forms import HandwritingPageUI
 from eclectusqt import util
 
 from libeclectus import characterinfo
+from libeclectus.util import encodeBase64, decodeBase64
 
 tomoeDictionaryPath = "/usr/local/share/tomoe/recognizer/"
 
@@ -63,10 +64,10 @@ class HandwritingPage(QWidget, HandwritingPageUI.Ui_Form):
         if self.pluginConfig:
             self.maximumSize = int(self.pluginConfig.readEntry(
                 "Handwriting maximum field size",
-                str(HandwritingPage.DEFAULT_MAXIMUM_FIELD_SIZE)))
+                str(HandwritingPage.DEFAULT_MAXIMUM_FIELD_SIZE)).toString())
             self.maximumResults = int(self.pluginConfig.readEntry(
                 "Handwriting maximum results",
-                str(HandwritingPage.DEFAULT_MAXIMUM_RESULTS)))
+                str(HandwritingPage.DEFAULT_MAXIMUM_RESULTS)).toString())
         else:
             self.maximumSize = HandwritingPage.DEFAULT_MAXIMUM_FIELD_SIZE
             self.maximumResults = HandwritingPage.DEFAULT_MAXIMUM_RESULTS
@@ -129,7 +130,7 @@ class HandwritingPage(QWidget, HandwritingPageUI.Ui_Form):
         if cmd.startswith('lookup'):
             inputString = re.match('lookup\(([^\)]+)\)', cmd).group(1)
             self.emit(SIGNAL('inputReceived(const QString &)'),
-                util.decodeBase64(inputString))
+                decodeBase64(inputString))
 
     def writeSettings(self):
         if self.pluginConfig:
@@ -205,7 +206,7 @@ class HandwritingPage(QWidget, HandwritingPageUI.Ui_Form):
                     for char in chars:
                         charLinks.append(
                             '<a class="character" href="#lookup(%s)">%s</a>' \
-                                % (util.encodeBase64(char), char))
+                                % (encodeBase64(char), char))
                     html = ' '.join(charLinks)
                 else:
                     html = '<p class="meta">%s</p>' % unicode(

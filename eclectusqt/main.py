@@ -21,11 +21,6 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 """
 
-__author__ = "Christoph Burgmer <cburgmer@ira.uka.de>"
-__license__ = 'GNU General Public License v3'
-__url__ = "http://code.google.com/p/eclectus"
-__version__ = "0.1alpha"
-
 import sys
 import re
 import os
@@ -75,6 +70,7 @@ from eclectusqt import handwritingpage
 from eclectusqt import vocabularypage
 from eclectusqt import renderthread
 from eclectusqt import util
+import eclectusqt
 
 from libeclectus import characterinfo
 from libeclectus import htmlview
@@ -126,11 +122,6 @@ class MainWindow(KXmlGuiWindow):
         self.miniMode = False
         self.initialised = False
         # start rendering thread
-        language = unicode(DictionaryConfig.readEntry("Language", None))
-        reading = unicode(DictionaryConfig.readEntry("Transcription", None))
-        dictionary = unicode(DictionaryConfig.readEntry("Dictionary", None))
-        charDomain = unicode(DictionaryConfig.readEntry("Character Domain",
-            None))
         htmlViewSettings = htmlview.HtmlView.readSettings(
             dict([(unicode(key), unicode(value)) \
                 for key, value in DictionaryConfig.entryMap().items()]))
@@ -140,8 +131,17 @@ class MainWindow(KXmlGuiWindow):
             self.renderThread.quit)
         self.renderThread.start()
 
-        self.renderThread.setCachedObject(characterinfo.CharacterInfo, language,
-            reading, dictionary, charDomain)
+        dictionaryData = {}
+        for field in ['Language', 'Transcription', 'Dictionary',
+            'Character Domain']:
+            value = DictionaryConfig.readEntry(field)
+            if value:
+                value = unicode(value)
+            dictionaryData[field] = value
+
+        self.renderThread.setCachedObject(characterinfo.CharacterInfo,
+            dictionaryData['Language'], dictionaryData['Transcription'],
+            dictionaryData['Dictionary'], dictionaryData['Character Domain'])
         charInfo = self.renderThread.getObjectInstance(
             characterinfo.CharacterInfo)
         self.renderThread.setCachedObject(htmlview.HtmlView, charInfo,
@@ -365,8 +365,9 @@ class MainWindow(KXmlGuiWindow):
 
     def restoreWindowState(self):
         # get saved settings
-        lastReadings = [unicode(s.toString()) for s in \
-            DictionaryConfig.readEntry("Last readings", [])]
+        lastReadings = [unicode(s) for s in \
+            DictionaryConfig.readEntry("Last readings", QVariant(''))\
+                .toString().split(',')]
         self.LAST_READING = {}
         for entry in lastReadings:
             entryLang, entryDict, entryReading = entry.split(':', 2)
@@ -375,10 +376,12 @@ class MainWindow(KXmlGuiWindow):
             self.LAST_READING[(entryLang, entryDict)] = entryReading
 
         # GUI settings
-        history = [entry.toString() for entry \
-            in GeneralConfig.readEntry("Url History", [])]
+        history = [unicode(entry) for entry \
+            in GeneralConfig.readEntry("Url History", QVariant(''))\
+                .toString().split(',')]
         self.characterCombo.insertItems(history)
-        self.historyLength = int(GeneralConfig.readEntry("History Length", "20"))
+        self.historyLength = int(
+            GeneralConfig.readEntry("History Length", "20").toString())
         self.autoLookup = GeneralConfig.readEntry(
             "Auto-Lookup clipboard", str(False)) != "False"
         self.autoLookupAction.setChecked(self.autoLookup)
@@ -386,17 +389,19 @@ class MainWindow(KXmlGuiWindow):
             "Auto-Lookup only Chinese characters", str(False)) != "False"
 
         self.splitterFrame.restoreState(QByteArray.fromBase64(
-            GeneralConfig.readEntry("Splitter", "").toAscii()))
+            GeneralConfig.readEntry("Splitter", "").toByteArray()))
         self.splitterSizes = [int(i) for i \
-            in GeneralConfig.readEntry("Splitter sizes", "220,426").split(',')]
+            in GeneralConfig.readEntry("Splitter sizes", QVariant("220,426"))\
+                .toString().split(',')]
 
         self.toolbarOriginalState = QByteArray.fromBase64(
-            GeneralConfig.readEntry("Toolbar original state", "").toAscii())
+            GeneralConfig.readEntry("Toolbar original state", "").toByteArray())
         self.restoreState(self.toolbarOriginalState)
         self.menuBar().setVisible(True)
 
-        self.characterChooser.setCurrentIndex(
-            int(GeneralConfig.readEntry("Toolbox current", "0")))
+        self.characterChooser.setCurrentIndex(int(
+            GeneralConfig.readEntry("Toolbox current", QVariant("0"))\
+                .toString()))
 
         visible = GeneralConfig.readEntry("Toolbox visibile", str(True))
         if visible == "False":
@@ -409,17 +414,19 @@ class MainWindow(KXmlGuiWindow):
         self.toggleToolboxAction.setChecked(
             self.characterChooserOriginalVisibility)
 
-        w = GeneralConfig.readEntry("Width", "640")
-        h = GeneralConfig.readEntry("Height", "420")
-        self.defaultWindowSize = QSize(int(w), int(h))
-        x = GeneralConfig.readEntry("LastX", "0")
-        y = GeneralConfig.readEntry("LastY", "0")
+        w = int(GeneralConfig.readEntry("Width", QVariant("640")).toString())
+        h = int(GeneralConfig.readEntry("Height", QVariant("420")).toString())
+        self.defaultWindowSize = QSize(w, h)
+        x = int(GeneralConfig.readEntry("LastX", QVariant("0")).toString())
+        y = int(GeneralConfig.readEntry("LastY", QVariant("0")).toString())
 
-        mini_w = GeneralConfig.readEntry("Mini-mode Width", "400")
-        mini_h = GeneralConfig.readEntry("Mini-mode Height", "200")
-        self.miniModeWindowSize = QSize(int(mini_w), int(mini_h))
+        mini_w = int(GeneralConfig.readEntry("Mini-mode Width",
+            QVariant("400")).toString())
+        mini_h = int(GeneralConfig.readEntry("Mini-mode Height",
+            QVariant("200")).toString())
+        self.miniModeWindowSize = QSize(mini_w, mini_h)
 
-        self.setGeometry(int(x), int(y), int(w), int(h))
+        self.setGeometry(x, y, w, h)
 
     def queryClose(self):
         """
@@ -746,17 +753,21 @@ def showDebug(message):
     if doDebug:
         print >>sys.stderr, message.encode(system_encoding, 'ignore')
 
+def linehere():
+    import inspect
+    return 'line %s in %r'%tuple(inspect.getframeinfo(inspect.currentframe().f_back)[1:3])
+
 def run():
     appName     = "eclectus"
     catalog     = ""
     programName = ki18n("Eclectus")
-    version     = __version__
+    version     = eclectusqt.__version__
     description = ki18n("Han character dictionary")
     license     = KAboutData.License_GPL_V3
     copyright   = ki18n("(c) 2008-2009 Christoph Burgmer")
     text        = ki18n(
         "Eclectus is a small Han character dictionary for learners.")
-    homePage    = __url__
+    homePage    = eclectusqt.__url__
     bugEmail    = "cburgmer@ira.uka.de"
 
     bugAddress = "http://code.google.com/p/eclectus/issues/list"

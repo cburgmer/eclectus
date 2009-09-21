@@ -21,7 +21,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 import os
 import sys
 
-from PyQt4.QtCore import SIGNAL, QUrl, QString, QByteArray
+from PyQt4.QtCore import SIGNAL, QUrl
 from PyQt4.QtWebKit import QWebPage
 
 from PyKDE4.kdecore import KStandardDirs
@@ -63,12 +63,6 @@ def getDataPaths():
         paths.append(localDataDir)
     return paths
 
-def encodeBase64(string):
-    return unicode(QString(string).toUtf8().toBase64())
-
-def decodeBase64(string):
-    return unicode(QString.fromUtf8(QByteArray.fromBase64(
-        QString(string).toAscii()).data()))
 
 class HandyWebpage(QWebPage):
     def __init__(self, parent):

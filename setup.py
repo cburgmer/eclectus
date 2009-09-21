@@ -6,12 +6,12 @@ import re
 import os
 import os.path
 import glob
-from eclectusqt import main
+import eclectusqt
 
-VERSION = str(main.__version__)
-(AUTHOR, EMAIL) = re.match('^(.*?)\s*<(.*)>$', main.__author__).groups()
-URL = main.__url__
-LICENSE = main.__license__
+VERSION = str(eclectusqt.__version__)
+(AUTHOR, EMAIL) = re.match('^(.*?)\s*<(.*)>$', eclectusqt.__author__).groups()
+URL = eclectusqt.__url__
+LICENSE = eclectusqt.__license__
 
 iconsTarget = os.popen("kde4-config --install icon").read().strip()
 dataTarget = os.popen("kde4-config --install data").read().strip()
@@ -32,7 +32,8 @@ setup(name='eclectus',
     url=URL,
     packages=['eclectusqt', 'eclectusqt/forms', 'libeclectus', 'tomoeqt'],
     package_dir={'eclectusqt': 'eclectusqt'},
-    package_data={'libeclectus': ['data/*.csv', 'data/*.sql']},
+    package_data={'libeclectus': ['data/*.csv', 'data/*.sql',
+        'locale/*/*/libeclectus.mo']},
     scripts=['eclectus'],
     data_files=[('share/doc/eclectus/scripts',
             mergeLists(glob.glob('libeclectus/scripts/*.py'),

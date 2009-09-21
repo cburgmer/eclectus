@@ -36,6 +36,7 @@ from eclectusqt import util
 
 from libeclectus import characterinfo
 from libeclectus import htmlview
+from libeclectus.util import decodeBase64
 
 class ComponentPage(QWidget, ComponentPageUI.Ui_Form):
     def __init__(self, mainWindow, renderThread, pluginConfig=None):
@@ -53,7 +54,7 @@ class ComponentPage(QWidget, ComponentPageUI.Ui_Form):
                 "Component include variants", str(True)) != "False"
 
             splitterState = self.pluginConfig.readEntry("Component splitter",
-                "").toAscii()
+                "").toByteArray()
             self.componentSplitter.restoreState(QByteArray.fromBase64(
                 splitterState))
         else:
@@ -134,8 +135,7 @@ class ComponentPage(QWidget, ComponentPageUI.Ui_Form):
     def componentResultClicked(self, url):
         cmd = unicode(url.toString()).replace('about:blank#', '')
         if cmd.startswith('lookup'):
-            char = util.decodeBase64(
-                re.match('lookup\(([^\)]+)\)', cmd).group(1))
+            char = decodeBase64(re.match('lookup\(([^\)]+)\)', cmd).group(1))
             self.emit(SIGNAL('inputReceived(const QString &)'), char)
 
     def componentClicked(self, url):
@@ -143,8 +143,7 @@ class ComponentPage(QWidget, ComponentPageUI.Ui_Form):
 
         cmd = unicode(url.toString()).replace('about:blank#', '')
         if cmd.startswith('component'):
-            char = util.decodeBase64(
-                re.match('component\(([^\)]+)\)', cmd).group(1))
+            char = decodeBase64(re.match('component\(([^\)]+)\)', cmd).group(1))
 
             if char in self.selectedComponents:
                 self.selectedComponents.remove(char)

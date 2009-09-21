@@ -38,6 +38,8 @@ from cjklib import characterlookup
 from cjklib import reading
 from cjklib import exception
 
+from libeclectus import util
+
 class CharacterInfo:
     """
     Provides lookup method services.
@@ -150,9 +152,9 @@ class CharacterInfo:
 
     UNICODE_SCRIPT_CLASSES = {'Han': [('2E80', '2E99'), ('2E9B', '2EF3'),
             ('2F00', '2FD5'), '3005', '3007', ('3021', '3029'),
-            ('3038', '303A'), '303B', ('3400', '4DB5'), ('4E00', '9FC3'),
-            ('F900', 'FA2D'), ('FA30', 'FA6A'), ('FA70', 'FAD9'),
-            ('20000', '2A6D6'), ('2F800', '2FA1D')],
+            ('3038', '303A'), '303B', ('3400', '4DB5'), ('4E00', '9FCB'),
+            ('F900', 'FA2D'), ('FA30', 'FA6D'), ('FA70', 'FAD9'),
+            ('20000', '2A6D6'), ('2A700', '2B734'), ('2F800', '2FA1D')],
         'Hiragana': [('3041', '3096'), ('309D', '309E'), '309F'],
         'Katakana': [('30A1', '30FA'), ('30FD', '30FE'), '30FF',
             ('31F0', '31FF'), ('32D0', '32FE'), ('3300', '3357'),
@@ -179,7 +181,7 @@ class CharacterInfo:
         @type locale: character
         @param locale: I{character locale} (one out of TCJKV)
         """
-        self.db = DatabaseConnector.getDBConnector()
+        self.db = DatabaseConnector({'url': util.getDatabaseUrl()})
 
         self.availableDictionaries = None
 
@@ -1299,8 +1301,8 @@ class CharacterInfo:
             includeEquivalentRadicalForms, includeSimilarCharacters)
 
         # create where clauses
-        lookupTable = self.db.tables['ComponentLookup']
-        strokeCountTable = self.db.tables['StrokeCount']
+        lookupTable = self.characterLookup.db.tables['ComponentLookup']
+        strokeCountTable = self.characterLookup.db.tables['StrokeCount']
 
         joinTables = []         # join over all tables by char and z-Variant
         filters = []            # filter for locale and component
@@ -1333,7 +1335,7 @@ class CharacterInfo:
         sel = select([mainAlias.c.Component], and_(*filters),
             from_obj=[fromObject], distinct=True)
 
-        result = self.db.selectScalars(sel)
+        result = self.characterLookup.db.selectScalars(sel)
 
         # augment result with equivalent forms
         # TODO only check for true radical components included in table, save work

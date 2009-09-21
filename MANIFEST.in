@@ -12,6 +12,7 @@ include eclectusqt/*.py
 include libeclectus/data/*.segmentations
 include libeclectus/data/*.csv
 include libeclectus/data/*.sql
+include libeclectus/locale/*/*/libeclectus.mo
 include libeclectus/files/COPYING*
 include libeclectus/files/README*
 include libeclectus/files/Makefile

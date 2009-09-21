@@ -31,6 +31,7 @@ from eclectusqt import util
 
 from libeclectus import htmlview
 from libeclectus import characterinfo
+from libeclectus.util import decodeBase64
 
 class RadicalPage(QWidget, RadicalPageUI.Ui_Form):
     SELECTED_RADICAL_CSS_CLASS = 'selectedRadicalEntry'
@@ -208,7 +209,7 @@ for(var i = 0; i < trs.length; i++)
         elif cmd.startswith('lookup'):
             inputString = re.match('lookup\(([^\)]+)\)', cmd).group(1)
             self.emit(SIGNAL('inputReceived(const QString &)'),
-                util.decodeBase64(inputString))
+                decodeBase64(inputString))
 
     def gotoEditChanged(self, inputString):
         self.gotoNextButton.setEnabled(False)

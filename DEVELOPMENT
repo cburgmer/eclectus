@@ -1,0 +1,13 @@
+Translation
+-----------
+Translations are maintained on launchpad:
+  https://translations.launchpad.net/eclectus/trunk/
+Translations can be entered directly via the website.
+
+Translation files (*.po) are pushed to the launchpad repository once a day
+and can be obtained by running
+  bzr clone lp:eclectus po
+
+To update local *.mo files, run
+  ./libeclectus/scripts/compile_mo.sh
+from the project directory.

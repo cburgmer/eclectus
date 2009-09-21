@@ -42,6 +42,7 @@ from eclectusqt import util
 
 from libeclectus import characterinfo
 from libeclectus import htmlview
+from libeclectus.util import encodeBase64, decodeBase64
 
 class BrowsingHistory(QObject):
     """
@@ -59,6 +60,7 @@ class BrowsingHistory(QObject):
         self.emit(SIGNAL("activated(const QString)"), self.current())
 
     def addItem(self, title):
+        assert type(title) in [type(u''), type('')]
         # cut forward items
         if self.canGoForward():
             self.browserHistory = self.browserHistory[:self.curHistoryIdx + 1]
@@ -226,18 +228,20 @@ function _go() { }
             hiddenSections = self.chooserConfig.readEntry(
                 "Dictionary hidden sections", None)
             if hiddenSections:
-                self.hiddenSections = set(unicode(hiddenSections).split(','))
+                self.hiddenSections = set([unicode(s) for s \
+                    in hiddenSections.toString().split(',')])
 
-            self.findHistory = self.chooserConfig.readEntry(
-                "Dictionary find history", [])
+            findHistory = self.chooserConfig.readEntry(
+                "Dictionary find history", None)
+            if findHistory:
+                self.findHistory = findHistory.toString().split(',')
 
-            self.startPage = unicode(
-                self.chooserConfig.readEntry("Dictionary start page",
-                    "welcome"))
+            self.startPage = self.chooserConfig.readEntry(
+                "Dictionary start page", "welcome").toString()
             if self.startPage == 'last':
                 lastPage = unicode(
                     self.chooserConfig.readEntry("Dictionary last page",
-                        self.WELCOME_PAGE))
+                        self.WELCOME_PAGE).toString())
                 if lastPage:
                     currentString = lastPage
             else:
@@ -567,7 +571,7 @@ function _go() { }
                 self.sectionContentVisible[blockName] = False
             self.reload()
         elif cmd.startswith('lookup'):
-            inputString = util.decodeBase64(
+            inputString = decodeBase64(
                 re.match('lookup\(([^\)]+)\)', cmd).group(1))
 
             self.load(inputString)
@@ -577,7 +581,7 @@ function _go() { }
             self.playCharString(realPath)
         elif cmd.startswith('addvocab'):
             params = re.match('addvocab\(([^\)]+)\)', cmd).group(1)
-            headword, reading, translation, audio = [util.decodeBase64(p) \
+            headword, reading, translation, audio = [decodeBase64(p) \
                 for p in params.split(';')]
 
             self.emit(
@@ -777,7 +781,7 @@ function _go() { }
             for example in self.SEARCH_EXAMPLES[key]:
                 examples.append(
                     u'<li><a href="about:blank#lookup(%s)">%s</a></li>' \
-                        % (util.encodeBase64(example), example))
+                        % (encodeBase64(example), example))
 
             exampleMessage = '<p>%s <ul>%s</ul></p>' \
                 % (i18n("Examples:"), ''.join(examples))
@@ -835,6 +839,7 @@ function _go() { }
             self.loadPage(pageName)
 
     def loadPage(self, pageName):
+        assert type(pageName) in [type(u''), type('')]
         pageType, value = pageName.split(':', 1)
 
         if pageType == 'about':
@@ -847,6 +852,7 @@ function _go() { }
         elif not self.isValidPageType(pageType) \
             or (pageType == 'character' and len(value) > 1) \
             or re.match('[\*\?]*$', value):
+            print pageType.encode('utf8'), value.encode('utf8')
             self.setHtml(self.getErrorPage(), QUrl('file:///'))
         else:
             self.setHtml('')
@@ -990,7 +996,7 @@ function _go() { }
                 headword, _, _, _ = content[0]
                 self.page().mainFrame().evaluateJavaScript(
                     "setText('%s'); setWordLink('%s');" \
-                        % (headword, util.encodeBase64(headword)))
+                        % (headword, encodeBase64(headword)))
 
     def objectCreated(self, id, classObject):
         if not self.initialised:

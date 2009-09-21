@@ -38,6 +38,8 @@ from cjklib.reading import ReadingFactory
 from cjklib.build import builder, cli, warn
 from cjklib import exception
 
+from libeclectus import util
+
 class UpdateVersionBuilder(builder.EntryGeneratorBuilder):
     """Table for keeping track of which date the release was."""
     PROVIDES = 'UpdateVersion'
@@ -1086,6 +1088,7 @@ Example: \"%prog build allAvail\""""
     @classmethod
     def getDefaultOptions(cls):
         options = cli.CommandLineBuilder.getDefaultOptions()
+        options['databaseUrl'] = util.getDatabaseUrl()
         # dataPath
         options['dataPath'] = ['.']
         # Eclectus path
