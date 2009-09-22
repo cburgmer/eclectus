@@ -588,6 +588,71 @@ class HanDeDictRadicalTableBuilder(builder.EntryGeneratorBuilder):
             .generator()
 
 
+class EnglishCSVRadicalTableBuilder(builder.CSVFileLoader):
+    """
+    Builds a radical table with index, reading and meaning using a CSV file.
+    """
+    PROVIDES = 'RadicalTable_zh_cmn__en'
+
+    TABLE_CSV_FILE_MAPPING = 'radicals_en.csv'
+    TABLE_DECLARATION_FILE_MAPPING = 'radicals_en.sql'
+
+
+class CombinedEnglishRadicalTableBuilder(EnglishCSVRadicalTableBuilder,
+    builder.EntryGeneratorBuilder):
+    """
+    Builds a radical table with index, reading using a CSV source, adding
+    names as defined by Unicode.
+    """
+    PROVIDES = 'RadicalTable_zh_cmn__en'
+
+    COLUMNS = ['RadicalIndex', 'Reading', 'Meaning']
+    PRIMARY_KEYS = ['RadicalIndex']
+    COLUMN_TYPES = {'RadicalIndex': Integer(), 'Reading': String(255),
+        'Meaning': Text()}
+
+    def build(self):
+        return builder.EntryGeneratorBuilder.build(self)
+
+    def getGenerator(self):
+        contentFile = self.findFile([self.TABLE_CSV_FILE_MAPPING], "table")
+
+        # write table content
+        if not self.quiet:
+            warn("Reading table '" + self.PROVIDES + "' from file '" \
+                + contentFile + "'")
+        import codecs
+        fileHandle = codecs.open(contentFile, 'r', 'utf-8')
+
+        radicalEntries = {}
+        for line in self.getCSVReader(fileHandle):
+            if len(line) == 1 and not line[0].strip():
+                continue
+            radicalIdx, reading, meaning = line
+            radicalEntries[int(radicalIdx)] = (reading, meaning.split(','))
+
+        # add unicode ones
+        import unicodedata
+        for i in range(0, 214):
+            radicalIdx = i + 1
+            if radicalIdx in radicalEntries:
+                reading, meanings = radicalEntries[radicalIdx]
+            else:
+                reading = None
+                meanings = []
+            try:
+                name = unicodedata.name(unichr(int('2f00', 16) + i))
+                name = name.replace('KANGXI RADICAL ', '').lower()
+                if name not in meanings:
+                    meanings += [name]
+            except ValueError:
+                pass
+
+            if meanings:
+                yield({'RadicalIndex': radicalIdx, 'Reading': reading,
+                    'Meaning': ', '.join(meanings)})
+
+
 class KanjidicEnRadicalTableBuilder(builder.EntryGeneratorBuilder):
     """
     Builds a radical table with index, radical name and meaning using Kanjidic.
@@ -1073,7 +1138,7 @@ Example: \"%prog build allAvail\""""
             'HanDeDict', 'UpdateVersion', 'Pronunciation_zh_cmn',
             'Pronunciation_zh_yue'],
         'base': ['UpdateVersion', 'SimilarCharacters', 'KangxiRadicalTable',
-            'KangxiRadicalStrokeCount'],
+            'KangxiRadicalStrokeCount', 'RadicalTable_zh_cmn__en'],
         'zh-cmn': ['RadicalNames_zh_cmn', 'Pronunciation_zh_cmn'],
         'ja': ['RadicalTable_ja__en'],
         'HanDeDict_related': ['RadicalTable_zh_cmn__de'],
@@ -1082,7 +1147,8 @@ Example: \"%prog build allAvail\""""
     DB_PREFER_BUILDERS = ['WiktionaryHSKVocabularyBuilder',
         'WeightedCEDICTBuilder', 'WeightedCFDictBuilder',
         'WeightedHanDeDictBuilder', 'WeightedCEDICTGRBuilder',
-        'WeightedEDICTBuilder', 'BaseAudioLibreDeMotsChinoisBuilder']
+        'WeightedEDICTBuilder', 'BaseAudioLibreDeMotsChinoisBuilder',
+        'CombinedEnglishRadicalTableBuilder']
     """Builders prefered for build process."""
 
     @classmethod
