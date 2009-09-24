@@ -291,7 +291,6 @@ class CharacterInfo:
         self.radicalForms = None
         self.kangxiRadicalForms = None
         self.radicalFormLookup = None
-        self.radicalDictTableName = None
         self.radicalNameTableName = None
 
         # create lookup for pronunciation files
@@ -1526,50 +1525,51 @@ class CharacterInfo:
 
         @rtype: dict
         @return: radical index, reading and definition
+        @todo Fix: Don't use dictionary language, but rather interface language
         """
-        if not self.dictionary:
-            return {}
+        if not hasattr(self, '_radicalDictionaryDict'):
+            radicalTableName = None
+            if self.dictionary:
+                _, _, _, cjkLang, targetLang, _ \
+                    = self.DICTIONARY_INFO[self.dictionary]
+                tableName = 'RadicalTable_' + cjkLang.replace('-', '_') \
+                    + '__' + targetLang.replace('-', '_')
+                if self.db.engine.has_table(tableName):
+                    radicalTableName = tableName
 
-        if self.radicalDictTableName == None:
-            _, _, _, cjkLang, targetLang, _ \
-                = self.DICTIONARY_INFO[self.dictionary]
-            tableName = 'RadicalTable_' + cjkLang.replace('-', '_') \
-                + '__' + targetLang.replace('-', '_')
-            if self.db.engine.has_table(tableName):
-                self.radicalDictTableName = tableName
+            if not radicalTableName:
+                self._radicalDictionaryDict = {}
+
             else:
-                self.radicalDictTableName = ''
+                table = self.db.tables[radicalTableName]
+                result = self.db.selectRows(select(
+                    [table.c.RadicalIndex, table.c.Meaning]))
 
-        if self.radicalDictTableName:
-            table = self.db.tables[self.radicalDictTableName]
-            result = self.db.selectRows(select(
-                [table.c.RadicalIndex, table.c.Meaning]))
+                entryDict = {}
+                for radicalIndex, definition in result:
+                #for radicalIndex, reading, definition in result:
+                    if not definition:
+                        definition = ''
 
-            entryDict = {}
-            for radicalIndex, definition in result:
-            #for radicalIndex, reading, definition in result:
-                if not definition:
-                    definition = ''
+                    # TODO
+                    #if reading:
+                        #_, dictReading, dictReadOpt, _, _ \
+                            #= self.DICTIONARY_INFO[self.dictionary]
+                        #try:
+                            #reading = self.readingFactory.convert(reading,
+                                #dictReading, self.reading,
+                                #sourceOptions=dictReadOpt)
+                        #except cjklib.exception.DecompositionError:
+                            #reading = '[' + reading + ']'
+                        #except cjklib.exception.ConversionError:
+                            #reading = '[' + reading + ']'
 
-                # TODO
-                #if reading:
-                    #_, dictReading, dictReadOpt, _, _ \
-                        #= self.DICTIONARY_INFO[self.dictionary]
-                    #try:
-                        #reading = self.readingFactory.convert(reading,
-                            #dictReading, self.reading,
-                            #sourceOptions=dictReadOpt)
-                    #except cjklib.exception.DecompositionError:
-                        #reading = '[' + reading + ']'
-                    #except cjklib.exception.ConversionError:
-                        #reading = '[' + reading + ']'
+                    #entryDict[radicalIndex] = (reading, definition)
+                    entryDict[radicalIndex] = ('', definition)
 
-                #entryDict[radicalIndex] = (reading, definition)
-                entryDict[radicalIndex] = ('', definition)
+                self._radicalDictionaryDict = entryDict
 
-            return entryDict
-
-        return {}
+        return self._radicalDictionaryDict
 
     #{ Pronunciation
 

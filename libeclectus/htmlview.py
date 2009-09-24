@@ -1384,12 +1384,18 @@ class HtmlView:
 
         htmlList.append(' '.join(charLinks))
 
+        radicalEntryDict = self.charInfo.getRadicalDictionaryEntries()
+        _, meaning = radicalEntryDict.get(radicalIndex, (None, None))
+        if meaning:
+            htmlList.append(' <span class="translation">%s</span>' % meaning)
+
         radicalForms = self.charInfo.getKangxiRadicalForms()
         _, strokeCount, _, _ = radicalForms[radicalIndex]
         if strokeCount:
-            htmlList.append(' (%s)' \
+            htmlList.append(' <span class="strokecount">(%s)</span>' \
                 % (ngettext('%(strokes)d stroke', '%(strokes)d strokes',
                     strokeCount) % {'strokes': strokeCount}))
+
 
         htmlList.append('<h3>%s</h3>' % gettext('Characters'))
 
