@@ -62,12 +62,12 @@ class HandwritingPage(QWidget, HandwritingPageUI.Ui_Form):
         self.pluginConfig = pluginConfig
 
         if self.pluginConfig:
-            self.maximumSize = int(self.pluginConfig.readEntry(
+            self.maximumSize = util.readConfigInt(self.pluginConfig,
                 "Handwriting maximum field size",
-                str(HandwritingPage.DEFAULT_MAXIMUM_FIELD_SIZE)).toString())
-            self.maximumResults = int(self.pluginConfig.readEntry(
+		HandwritingPage.DEFAULT_MAXIMUM_FIELD_SIZE)
+            self.maximumResults = util.readConfigInt(self.pluginConfig,
                 "Handwriting maximum results",
-                str(HandwritingPage.DEFAULT_MAXIMUM_RESULTS)).toString())
+                HandwritingPage.DEFAULT_MAXIMUM_RESULTS)
         else:
             self.maximumSize = HandwritingPage.DEFAULT_MAXIMUM_FIELD_SIZE
             self.maximumResults = HandwritingPage.DEFAULT_MAXIMUM_RESULTS

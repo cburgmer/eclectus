@@ -72,7 +72,7 @@
    <item>
     <widget class="KSqueezedTextLabel" name="statusLabel" >
      <property name="text" >
-      <string>KSqueezedTextLabel</string>
+      <string></string>
      </property>
     </widget>
    </item>

@@ -13,15 +13,32 @@ VERSION = str(eclectusqt.__version__)
 URL = eclectusqt.__url__
 LICENSE = eclectusqt.__license__
 
-iconsTarget = os.popen("kde4-config --install icon").read().strip()
-dataTarget = os.popen("kde4-config --install data").read().strip()
-menuTarget = os.popen("kde4-config --install xdgdata-apps").read().strip()
+#installPrefix = os.popen("kde4-config --prefix").read().strip()
+def getTarget(fileType):
+    path = os.popen("kde4-config --install %s" % fileType).read().strip()
+    # TODO cannot install with to /usr/local as KDE won't find anything
+    #if path.startswith(installPrefix):
+        #path = path.replace(installPrefix, '', 1)
+        #if path.startswith('/'):
+            #path = path.lstrip('/')
+    return path
 
-def mergeLists(*lists):
-    resultList = []
-    for l in lists:
-        resultList.extend(l)
-    return resultList
+iconsTarget = getTarget('icon')
+dataTarget = getTarget('data')
+menuTarget = getTarget('xdgdata-apps')
+localeTarget = getTarget('locale')
+
+def moPathList(targetDir, sourceDir, globPattern):
+    cwd = os.getcwd()
+    os.chdir(sourceDir)
+
+    fileList = []
+    for name in glob.glob(globPattern):
+        targetPath = os.path.join(targetDir, os.path.dirname(name))
+        fileList.append((targetPath, [os.path.join(sourceDir, name)]))
+
+    os.chdir(cwd)
+    return fileList
 
 setup(name='eclectus',
     version=VERSION,
@@ -33,22 +50,23 @@ setup(name='eclectus',
     packages=['eclectusqt', 'eclectusqt/forms', 'libeclectus', 'tomoeqt'],
     package_dir={'eclectusqt': 'eclectusqt'},
     package_data={'libeclectus': ['data/*.csv', 'data/*.sql',
-        'locale/*/*/libeclectus.mo']},
+        'locale/*/libeclectus.mo']},
     scripts=['eclectus'],
-    data_files=[('share/doc/eclectus/scripts',
-            mergeLists(glob.glob('libeclectus/scripts/*.py'),
-                glob.glob('libeclectus/scripts/*.sh'))),
+    data_files=[
+        #('share/doc/eclectus/scripts',
+            #mergeLists(glob.glob('libeclectus/scripts/*.py'),
+                #glob.glob('libeclectus/scripts/*.sh'))),
         (os.path.join(dataTarget, 'eclectus'),
-            mergeLists(['eclectusqt/eclectusui.rc',
-                'eclectusqt/data/style.css'],
-                glob.glob('eclectusqt/data/*.png'),
-                glob.glob('eclectusqt/data/*.svg'))),
+            ['eclectusqt/eclectusui.rc', 'eclectusqt/data/style.css'] \
+                + glob.glob('eclectusqt/data/*.png') \
+                + glob.glob('eclectusqt/data/*.svg')),
         ('share/doc/eclectus/', ['README', 'changelog', 'COPYING']),
         (os.path.join(iconsTarget, 'eclectus'),
             glob.glob('eclectusqt/data/icons/*.png')),
         (iconsTarget, ['eclectusqt/data/icons/eclectus.png']),
         ('/usr/share/pixmaps/', glob.glob('eclectusqt/data/icons/*.xpm')),
-        (menuTarget, ['eclectusqt/eclectus.desktop'])],
+        (menuTarget, ['eclectusqt/eclectus.desktop'])] \
+        + moPathList(localeTarget, 'eclectusqt/locale', '*/*/eclectusqt.mo'),
     license=LICENSE,
     classifiers=['Intended Audience :: Education',
         'License :: OSI Approved :: GNU General Public License (GPL)',

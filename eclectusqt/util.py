@@ -63,6 +63,23 @@ def getDataPaths():
         paths.append(localDataDir)
     return paths
 
+# config
+
+def readConfigString(config, option, default=None):
+    value = config.readEntry(option)
+    if not value:
+	return default
+    elif hasattr(value, "toString"):
+	return value.toString()
+    else:
+	return unicode(value)
+
+def _readConfig(config, option, default, conversionFunc):
+    return conversionFunc(readConfigString(config, option, default))
+
+def readConfigInt(config, option, default=None):
+    return _readConfig(config, option, default, int)
+
 
 class HandyWebpage(QWebPage):
     def __init__(self, parent):

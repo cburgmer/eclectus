@@ -30,12 +30,12 @@ from datetime import date, time, datetime
 
 from PyQt4.QtCore import Qt, SIGNAL
 from PyQt4.QtGui import QWidget, QApplication, QCursor
-from PyKDE4.kdecore import i18n, KTemporaryFile, KUrl
+from PyKDE4.kdecore import ki18n, i18n, KTemporaryFile, KUrl
 from PyKDE4.kio import KIO
 from PyKDE4.kdeui import KIcon, KMessageBox, KStandardGuiItem, KDialog
 from PyKDE4.kdeui import KAction, KActionCollection
 
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exceptions import OperationalError
 
 try:
     from cjklib import build
@@ -228,11 +228,11 @@ class UpdateDialog(KDialog):
 
 
 class UpdateWidget(QWidget, UpdateUI.Ui_Form):
-    DICTIONARY_NAMES = {'CEDICT': i18n('English-Chinese (CEDICT)'),
-        'CEDICTGR': i18n('English-Chinese (CEDICT, GR version)'),
-        'HanDeDict': i18n('German-Chinese (HanDeDict)'),
-        'CFDICT': i18n('French-Chinese (CFDICT)'),
-        'EDICT': i18n('English-Japanese (EDICT)')}
+    DICTIONARY_NAMES = {'CEDICT': ki18n('English-Chinese (CEDICT)'),
+        'CEDICTGR': ki18n('English-Chinese (CEDICT, GR version)'),
+        'HanDeDict': ki18n('German-Chinese (HanDeDict)'),
+        'CFDICT': ki18n('French-Chinese (CFDICT)'),
+        'EDICT': ki18n('English-Japanese (EDICT)')}
 
     def __init__(self, mainWindow, renderThread, pluginConfig=None):
         QWidget.__init__(self, mainWindow)
@@ -245,8 +245,9 @@ class UpdateWidget(QWidget, UpdateUI.Ui_Form):
             in self.DICTIONARY_NAMES.keys() if hasDownloader(dictionaryName)]
         self.currentDictionary = self.dictionarList[0]
 
-        self.dictionaryCombo.addItems([self.DICTIONARY_NAMES[dictionary] \
-            for dictionary in self.dictionarList])
+        self.dictionaryCombo.addItems(
+            [self.DICTIONARY_NAMES[dictionary].toString() \
+                for dictionary in self.dictionarList])
         self.dictionaryCombo.setEnabled(False)
         self.connect(self.dictionaryCombo, SIGNAL("activated(int)"),
             self.slotDictionarySelected)
@@ -359,7 +360,8 @@ class UpdateWidget(QWidget, UpdateUI.Ui_Form):
             self.statusLabel.setText(i18n('Installing...', link))
 
             dbBuild = self.renderThread.getObjectInstance(build.DatabaseBuilder)
-            dbBuild.addBuilderOptions(
+            builderClass = dbBuild.getTableBuilder(self.currentDictionary)
+            dbBuild.setBuilderOptions(builderClass, 
                 {'filePath': unicode(filePath), 'fileType': unicode(fileType)})
 
             tables = [self.currentDictionary]

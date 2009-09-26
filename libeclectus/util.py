@@ -90,10 +90,10 @@ def getLocaleDir():
 def getTranslation(localLanguage):
     if localLanguage:
         t = gettext.translation('libeclectus', getLocaleDir(),
-            languages=[localLanguage], fallback=False)
+            languages=[localLanguage], fallback=True)
     else:
         t = gettext.translation('libeclectus', getLocaleDir(),
-            fallback=False)
+            fallback=True)
     return t
 
 # database

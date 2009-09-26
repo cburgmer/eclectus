@@ -48,15 +48,15 @@ class ComponentPage(QWidget, ComponentPageUI.Ui_Form):
         self.setupUi(self)
 
         if self.pluginConfig:
-            self.includeSimilar = self.pluginConfig.readEntry(
+            self.includeSimilar = util.readConfigString(self.pluginConfig,
                 "Component include similar", str(True)) != "False"
-            self.includeVariants = self.pluginConfig.readEntry(
+            self.includeVariants = util.readConfigString(self.pluginConfig, 
                 "Component include variants", str(True)) != "False"
 
-            splitterState = self.pluginConfig.readEntry("Component splitter",
-                "").toByteArray()
+            splitterState = util.readConfigString(self.pluginConfig,
+		"Component splitter", "")
             self.componentSplitter.restoreState(QByteArray.fromBase64(
-                splitterState))
+                str(splitterState)))
         else:
             self.includeSimilar = True
             self.includeVariants = True

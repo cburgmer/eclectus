@@ -28,15 +28,15 @@ import signal
 import locale
 
 from PyQt4 import QtCore, QtGui
-from PyQt4.QtCore import Qt, SIGNAL, QCoreApplication, QVariant, QString, QSize
-from PyQt4.QtCore import QByteArray, QUrl
+from PyQt4.QtCore import Qt, SIGNAL, QVariant, QSize, QByteArray
 from PyQt4.QtGui import QSizePolicy, QAction, QListWidgetItem, QClipboard
 from PyQt4.QtGui import QMainWindow, QApplication, QIcon, QFont, QImage
 from PyQt4.QtGui import QCursor, QLabel
 
 from PyKDE4 import kdeui
-from PyKDE4.kdecore import ki18n, i18n, KCmdLineArgs, KCmdLineOptions
-from PyKDE4.kdecore import KAboutData, KConfig, KConfigGroup
+from PyKDE4.kdecore import ki18n, i18n, KCmdLineArgs, KCmdLineOptions, KGlobal
+from PyKDE4.kdecore import KAboutData, KLocalizedString, KConfig, KConfigGroup
+from PyKDE4.kdecore import KStandardDirs
 from PyKDE4.kdeui import KConfigDialog, KConfigSkeleton, KMessageBox
 from PyKDE4.kdeui import KApplication, KXmlGuiWindow, KShortcut, KIcon
 from PyKDE4.kdeui import KAction, KStandardAction, KToggleAction, KSelectAction
@@ -49,7 +49,7 @@ try:
         from distutils import version
         cjklibVersion = version.LooseVersion(cjklib.__version__)
         if cjklibVersion != '0.1alpha' \
-            and cjklibVersion < version.LooseVersion('0.1alpha-svn20090816'):
+            and cjklibVersion < version.LooseVersion('0.1alpha-svn20090924'):
             import logging
             logging.warn('Your cjklib version is too old.' \
                 + ' You might experience difficulties!')
@@ -78,41 +78,36 @@ from libeclectus import htmlview
 doDebug = 1
 
 class MainWindow(KXmlGuiWindow):
-    READING_NAMES = {'Pinyin': i18n('Pinyin'), 'WadeGiles': i18n('Wade-Giles'),
-        'MandarinIPA': i18n('IPA'), 'GR': i18n('Gwoyeu Romatzyh'),
-        'Jyutping': i18n('Jyutping'), 'CantoneseYale': i18n('Yale'),
-        'Hangul': i18n('Hangul'), 'Kana': i18n('Kana')}
+    READING_NAMES = {'Pinyin': ki18n('Pinyin'),
+        'WadeGiles': ki18n('Wade-Giles'), 'MandarinIPA': ki18n('IPA'),
+        'GR': ki18n('Gwoyeu Romatzyh'), 'Jyutping': ki18n('Jyutping'),
+        'CantoneseYale': ki18n('Yale'), 'Hangul': ki18n('Hangul'),
+        'Kana': ki18n('Kana')}
 
-    LANGUAGE_NAMES = {'zh-cmn-Hant': i18n('Mandarin (Traditional)'),
-        'zh-cmn-Hans': i18n('Mandarin (Simplified)'),
-        'zh-yue': i18n('Cantonese'), 'ko': i18n('Korean'),
-        'ja': i18n('Japanese')}
-
-    # TODO in update.py
-    DICTIONARY_NAMES = {'CEDICT': i18n('English-Chinese (CEDICT)'),
-        'CEDICTGR': i18n('English-Chinese (CEDICT, GR version)'),
-        'HanDeDict': i18n('German-Chinese (HanDeDict)'),
-        'CFDICT': i18n('French-Chinese (CFDICT)'),
-        'EDICT': i18n('English-Japanese (EDICT)')}
+    LANGUAGE_NAMES = {'zh-cmn-Hant': ki18n('Mandarin (Traditional)'),
+        'zh-cmn-Hans': ki18n('Mandarin (Simplified)'),
+        'zh-yue': ki18n('Cantonese'), 'ko': ki18n('Korean'),
+        'ja': ki18n('Japanese')}
 
     EXT_DICTIONARY_NAMES = {
-        ('zh-cmn-Hans', 'CEDICT'): i18n('Simplified Chinese-English (CEDICT)'),
-        ('zh-cmn-Hant', 'CEDICT'): i18n('Traditional Chinese-English (CEDICT)'),
+        ('zh-cmn-Hans', 'CEDICT'): ki18n('Simplified Chinese-English (CEDICT)'),
+        ('zh-cmn-Hant', 'CEDICT'): \
+            ki18n('Traditional Chinese-English (CEDICT)'),
         ('zh-cmn-Hant', 'CEDICTGR'): \
-            i18n('Traditional Chinese-English for Gwoyeu Romatzyh (CEDICTGR)'),
+            ki18n('Traditional Chinese-English for Gwoyeu Romatzyh (CEDICTGR)'),
         ('zh-cmn-Hans', 'HanDeDict'): \
-            i18n('Simplified Chinese-German (HanDeDict)'),
+            ki18n('Simplified Chinese-German (HanDeDict)'),
         ('zh-cmn-Hant', 'HanDeDict'): \
-            i18n('Traditional Chinese-German (HanDeDict)'),
-        ('zh-cmn-Hans', 'CFDICT'): i18n('Simplified Chinese-French (CFDICT)'),
-        ('zh-cmn-Hant', 'CFDICT'): i18n('Traditional Chinese-French (CFDICT)'),
-        ('ja', 'EDICT'): i18n('Japanese-English (EDICT)')}
+            ki18n('Traditional Chinese-German (HanDeDict)'),
+        ('zh-cmn-Hans', 'CFDICT'): ki18n('Simplified Chinese-French (CFDICT)'),
+        ('zh-cmn-Hant', 'CFDICT'): ki18n('Traditional Chinese-French (CFDICT)'),
+        ('ja', 'EDICT'): ki18n('Japanese-English (EDICT)')}
 
     CHOOSER_PLUGINS = [
-        (radicalpage.RadicalPage, i18n('&Radicals')),
-        (componentpage.ComponentPage, i18n('&Components')),
-        (handwritingpage.HandwritingPage, i18n('Hand&writing')),
-        (vocabularypage.VocabularyPage, i18n('&Vocabulary')),
+        (radicalpage.RadicalPage, ki18n('&Radicals')),
+        (componentpage.ComponentPage, ki18n('&Components')),
+        (handwritingpage.HandwritingPage, ki18n('Hand&writing')),
+        (vocabularypage.VocabularyPage, ki18n('&Vocabulary')),
         ]
     """Plugins loaded into the side panel."""
 
@@ -144,6 +139,8 @@ class MainWindow(KXmlGuiWindow):
             dictionaryData['Dictionary'], dictionaryData['Character Domain'])
         charInfo = self.renderThread.getObjectInstance(
             characterinfo.CharacterInfo)
+        # set htmlview object and give proper locale
+        htmlViewSettings['localLanguage'] = unicode(KGlobal.locale().language())
         self.renderThread.setCachedObject(htmlview.HtmlView, charInfo,
             **htmlViewSettings)
 
@@ -223,7 +220,7 @@ class MainWindow(KXmlGuiWindow):
                 and isinstance(page, vocabularypage.VocabularyPage):
                 self.vocabularyPlugin = len(self.plugins)
 
-            self.characterChooser.addItem(page, heading)
+            self.characterChooser.addItem(page, heading.toString())
             self.connect(page, SIGNAL('inputReceived(const QString &)'),
                 self.dictionaryPage.load)
 
@@ -365,43 +362,43 @@ class MainWindow(KXmlGuiWindow):
 
     def restoreWindowState(self):
         # get saved settings
-        lastReadings = [unicode(s) for s in \
-            DictionaryConfig.readEntry("Last readings", QVariant(''))\
-                .toString().split(',')]
+        lastReadings = util.readConfigString(DictionaryConfig, "Last readings",
+            '').split(',')
         self.LAST_READING = {}
         for entry in lastReadings:
+            if not entry:
+                continue
             entryLang, entryDict, entryReading = entry.split(':', 2)
             if entryDict == '':
                 entryDict = None
             self.LAST_READING[(entryLang, entryDict)] = entryReading
 
         # GUI settings
-        history = [unicode(entry) for entry \
-            in GeneralConfig.readEntry("Url History", QVariant(''))\
-                .toString().split(',')]
+        history = util.readConfigString(GeneralConfig, "Url History", '')\
+            .split(',')
         self.characterCombo.insertItems(history)
-        self.historyLength = int(
-            GeneralConfig.readEntry("History Length", "20").toString())
-        self.autoLookup = GeneralConfig.readEntry(
+        self.historyLength = util.readConfigInt(GeneralConfig, "History Length",
+            20)
+        self.autoLookup = util.readConfigString(GeneralConfig,
             "Auto-Lookup clipboard", str(False)) != "False"
         self.autoLookupAction.setChecked(self.autoLookup)
-        self.onlyAutoLookupCJKCharacters = GeneralConfig.readEntry(
+        self.onlyAutoLookupCJKCharacters = util.readConfigString(GeneralConfig,
             "Auto-Lookup only Chinese characters", str(False)) != "False"
 
         self.splitterFrame.restoreState(QByteArray.fromBase64(
-            GeneralConfig.readEntry("Splitter", "").toByteArray()))
+            str(util.readConfigString(GeneralConfig, "Splitter", ""))))
         self.splitterSizes = [int(i) for i \
-            in GeneralConfig.readEntry("Splitter sizes", QVariant("220,426"))\
-                .toString().split(',')]
+            in util.readConfigString(GeneralConfig, "Splitter sizes",
+                "220,426").split(',')]
 
         self.toolbarOriginalState = QByteArray.fromBase64(
-            GeneralConfig.readEntry("Toolbar original state", "").toByteArray())
+            str(util.readConfigString(GeneralConfig, "Toolbar original state",
+                "")))
         self.restoreState(self.toolbarOriginalState)
         self.menuBar().setVisible(True)
 
-        self.characterChooser.setCurrentIndex(int(
-            GeneralConfig.readEntry("Toolbox current", QVariant("0"))\
-                .toString()))
+        self.characterChooser.setCurrentIndex(util.readConfigInt(GeneralConfig,
+            "Toolbox current", 0))
 
         visible = GeneralConfig.readEntry("Toolbox visibile", str(True))
         if visible == "False":
@@ -414,16 +411,14 @@ class MainWindow(KXmlGuiWindow):
         self.toggleToolboxAction.setChecked(
             self.characterChooserOriginalVisibility)
 
-        w = int(GeneralConfig.readEntry("Width", QVariant("640")).toString())
-        h = int(GeneralConfig.readEntry("Height", QVariant("420")).toString())
+        w = util.readConfigInt(GeneralConfig, "Width", 640)
+        h = util.readConfigInt(GeneralConfig, "Height", 420)
         self.defaultWindowSize = QSize(w, h)
-        x = int(GeneralConfig.readEntry("LastX", QVariant("0")).toString())
-        y = int(GeneralConfig.readEntry("LastY", QVariant("0")).toString())
+        x = util.readConfigInt(GeneralConfig, "LastX", 0)
+        y = util.readConfigInt(GeneralConfig, "LastY", 0)
 
-        mini_w = int(GeneralConfig.readEntry("Mini-mode Width",
-            QVariant("400")).toString())
-        mini_h = int(GeneralConfig.readEntry("Mini-mode Height",
-            QVariant("200")).toString())
+        mini_w = util.readConfigInt(GeneralConfig, "Mini-mode Width", 400)
+        mini_h = util.readConfigInt(GeneralConfig, "Mini-mode Height", 200)
         self.miniModeWindowSize = QSize(mini_w, mini_h)
 
         self.setGeometry(x, y, w, h)
@@ -464,6 +459,8 @@ class MainWindow(KXmlGuiWindow):
         GeneralConfig.writeEntry("Splitter sizes", ",".join(
             [str(i) for i in self.splitterSizes]))
 
+        if not self.miniMode:
+            self.toolbarOriginalState = self.saveState(0)
         GeneralConfig.writeEntry("Toolbar original state",
             QByteArray.toBase64(self.toolbarOriginalState))
 
@@ -576,9 +573,10 @@ class MainWindow(KXmlGuiWindow):
                         currentIndex = len(self.dictionaryList)
 
                     if (language, dictionary) in self.EXT_DICTIONARY_NAMES:
-                        name = self.EXT_DICTIONARY_NAMES[(language, dictionary)]
+                        name = self.EXT_DICTIONARY_NAMES[
+                            (language, dictionary)].toString()
                     else:
-                        name = self.LANGUAGE_NAMES[language] + name
+                        name = self.LANGUAGE_NAMES[language].toString() + name
                     self.dictionaryList.append((name, language, dictionary))
 
         # add languages without dictionaries
@@ -587,7 +585,7 @@ class MainWindow(KXmlGuiWindow):
                 if currentLanguage == language:
                     currentIndex = len(self.dictionaryList)
                 self.dictionaryList.append(
-                    (self.LANGUAGE_NAMES[language], language, None))
+                    (self.LANGUAGE_NAMES[language].toString(), language, None))
 
         self.dictChooserAction.setItems(
             [name for name, _, _ in self.dictionaryList])
@@ -599,15 +597,16 @@ class MainWindow(KXmlGuiWindow):
         charInfo = self.renderThread.getObjectInstance(
             characterinfo.CharacterInfo)
         readings = charInfo.getCompatibleReadings(charInfo.language)
-        readingNames = [self.READING_NAMES[reading] for reading in readings]
+        readingNames = [self.READING_NAMES[reading].toString() \
+            for reading in readings]
         self.readingChooserAction.setItems(readingNames)
 
-        readingName = self.READING_NAMES[charInfo.reading]
+        readingName = self.READING_NAMES[charInfo.reading].toString()
         currentIndex = readingNames.index(readingName)
         self.readingChooserAction.setCurrentItem(currentIndex)
 
-        self.readingNameLookup = dict([(name, reading) for reading, name \
-            in self.READING_NAMES.items()])
+        self.readingNameLookup = dict([(name.toString(), reading) \
+            for reading, name in self.READING_NAMES.items()])
 
     def updateCharDomainSelector(self):
         # update readings
@@ -759,7 +758,7 @@ def linehere():
 
 def run():
     appName     = "eclectus"
-    catalog     = ""
+    catalog     = "eclectusqt"
     programName = ki18n("Eclectus")
     version     = eclectusqt.__version__
     description = ki18n("Han character dictionary")
@@ -779,7 +778,7 @@ def run():
             .subs(bugAddress),
         ki18n('Please use %1 to report bugs.')\
             .subs('<a href="%s">%s</a>' % (bugAddress, bugAddress)))
-    aboutData.addCredit(ki18n(''), ki18n("Arrr, Eclectus sits on the shoulders of some fine pirates:"))
+    aboutData.addCredit(KLocalizedString(), ki18n("Arrr, Eclectus sits on the shoulders of some fine pirates:"))
     aboutData.addCredit(ki18n("Jim Breen and contributors"), ki18n("EDICT"), '',
         'http://www.csse.monash.edu.au/~jwb/j_edict.html')
     aboutData.addCredit(ki18n("Paul Denisowski and current contributors"),
@@ -821,6 +820,14 @@ def run():
     # create applicaton
     global g_app
     g_app = KApplication()
+
+    # TODO how to access local .mo file?
+    #base = os.path.dirname(os.path.abspath(__file__))
+    #localeDir = os.path.join(base, "locale")
+    #print localeDir
+    #if os.path.exists(localeDir):
+        #print KGlobal.dirs().addResourceDir('locale', localeDir + '/', True)
+    #print KGlobal.dirs().findResource('locale', 'de/LC_MESSAGES/eclectusqt.mo')
 
     # read config file and make global
     global GeneralConfig

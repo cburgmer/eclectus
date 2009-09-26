@@ -18,18 +18,22 @@ fi
 fileList=i18n.files
 echo "Generating translations"
 
-for dir in libeclectus
+for i in eclectusqt/*.py eclectusqt/forms/*.py
+do
+    echo $i >> eclectusqt/$fileList
+done
+
+echo "libeclectus/htmlview.py" >> libeclectus/$fileList
+
+for dir in libeclectus eclectusqt
 do
     echo "module $dir"
-    for i in $dir/*.py
-    do
-        echo $i >> $dir/$fileList
-    done
 
     version=$(python -c "import $dir; print $dir.__version__")
     potFile=po/$dir/messages.pot
     xgettext -s --no-wrap --package-name="$dir" --package-version=$version \
-        --files-from=$dir/$fileList --output=$potFile
+        --keyword=i18n --keyword=ki18n --files-from=$dir/$fileList \
+        --output=$potFile
     for file in po/$dir/*.po
     do
         echo -n $file

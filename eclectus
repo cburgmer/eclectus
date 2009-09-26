@@ -3,9 +3,6 @@
 u"""
 Eclectus is a small Han character dictionary.
 
-To do:
-  See TODO file.
-
 Features:
   * Supports EDICT and CEDICT style dictionaries,
   * currently supports Japanese, Mandarin Chinese (traditional and simplified),

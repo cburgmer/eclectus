@@ -48,7 +48,7 @@ class UpdateVersionBuilder(builder.EntryGeneratorBuilder):
     COLUMN_TYPES = {'TableName': String(255), 'ReleaseDate': DateTime()}
 
     def getGenerator(self):
-        return builder.ListGenerator([]).generator()
+        return iter([])
 
 
 class SimilarCharactersBuilder(builder.CSVFileLoader):

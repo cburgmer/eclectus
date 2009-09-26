@@ -22,9 +22,10 @@ import re
 import urllib
 import functools
 
+from PyQt4 import QtGui
 from PyQt4.QtCore import Qt, SIGNAL, QObject, QVariant, QUrl
 from PyQt4.QtGui import QWidget, QApplication, QDesktopServices, QIcon, QAction
-from PyQt4.QtGui import QClipboard, QDialog, QPrinter, QPrintDialog
+from PyQt4.QtGui import QPrinter, QPrintDialog
 from PyQt4.QtWebKit import QWebView, QWebPage
 try:
     from PyQt4.phonon import Phonon
@@ -36,7 +37,7 @@ from PyKDE4.kdeui import KIcon, KAction, KToggleAction, KToolBarPopupAction
 from PyKDE4.kdeui import KActionCollection, KStandardAction, KStandardShortcut
 from PyKDE4.kdeui import KStandardGuiItem, KMessageBox, KFind, KFindDialog
 from PyKDE4.kdeui import KMenu, KActionMenu
-from PyKDE4.kdecore import i18n
+from PyKDE4.kdecore import ki18n, i18n
 
 from eclectusqt import util
 
@@ -123,16 +124,16 @@ class DictionaryPage(QWebView):
         'getLinkSection']
     """Sections hidden by default."""
 
-    SECTION_NAMES ={'getMeaningSection': i18n('Dictionary'),
-        'getVariantSection': i18n('Variant links'),
-        'getVocabularySection': i18n('Vocabulary'),
-        'getStrokeOrderSection': i18n('Stroke order'),
-        'getLinkSection': i18n('Links'),
-        'getCharacterWithComponentSection': i18n('Characters including glyph'),
+    SECTION_NAMES ={'getMeaningSection': ki18n('Dictionary'),
+        'getVariantSection': ki18n('Variant links'),
+        'getVocabularySection': ki18n('Vocabulary'),
+        'getStrokeOrderSection': ki18n('Stroke order'),
+        'getLinkSection': ki18n('Links'),
+        'getCharacterWithComponentSection': ki18n('Characters including glyph'),
         'getCharacterWithSamePronunciationSection':
-                i18n('Characters with same pronunciation'),
-        'getHeadwordContainedCharactersSection': i18n('Single characters'),
-        'getDecompositionTreeSection': i18n('Character structure'),
+                ki18n('Characters with same pronunciation'),
+        'getHeadwordContainedCharactersSection': ki18n('Single characters'),
+        'getDecompositionTreeSection': ki18n('Character structure'),
         #'getCombinedContainedVocabularySection': i18n('Contained vocabulary'), # TODO
         }
 
@@ -225,23 +226,22 @@ function _go() { }
         currentString = self.WELCOME_PAGE
 
         if self.chooserConfig:
-            hiddenSections = self.chooserConfig.readEntry(
+            hiddenSections = util.readConfigString(self.chooserConfig,
                 "Dictionary hidden sections", None)
             if hiddenSections:
                 self.hiddenSections = set([unicode(s) for s \
-                    in hiddenSections.toString().split(',')])
+                    in hiddenSections.split(',')])
 
-            findHistory = self.chooserConfig.readEntry(
+            findHistory = util.readConfigString(self.chooserConfig,
                 "Dictionary find history", None)
             if findHistory:
-                self.findHistory = findHistory.toString().split(',')
+                self.findHistory = findHistory.split(',')
 
-            self.startPage = self.chooserConfig.readEntry(
-                "Dictionary start page", "welcome").toString()
+            self.startPage = util.readConfigString(self.chooserConfig,
+                "Dictionary start page", "welcome")
             if self.startPage == 'last':
-                lastPage = unicode(
-                    self.chooserConfig.readEntry("Dictionary last page",
-                        self.WELCOME_PAGE).toString())
+                lastPage = util.readConfigString(self.chooserConfig,
+			"Dictionary last page", self.WELCOME_PAGE)
                 if lastPage:
                     currentString = lastPage
             else:
@@ -403,13 +403,14 @@ function _go() { }
         self._sectionChooserAction.setObjectName("sectionchooser")
 
         self.sectionSelectActions = []
-        sortedSections = sorted(self.SECTION_NAMES.items(),
-            key=lambda (key, value): value)
+        sortedSections = sorted(
+            [(k, v.toString()) for k, v in self.SECTION_NAMES.items()],
+                key=lambda (key, value): value)
         self.sectionIndex = dict([(idx, section) for idx, (section, _) \
             in enumerate(sortedSections)])
 
         for idx, section in self.sectionIndex.items():
-            sectionName = unicode(self.SECTION_NAMES[section])
+            sectionName = unicode(self.SECTION_NAMES[section].toString())
             toggleAction = KToggleAction(sectionName.replace('&', '&&'), self)
             self._sectionChooserAction.addAction(toggleAction)
             self.sectionSelectActions.append(toggleAction)
@@ -595,7 +596,7 @@ function _go() { }
 
     def slotLookupClipboard(self):
         clipboardText = unicode(QApplication.clipboard().text(
-            QClipboard.Selection).simplified())
+            QtGui.QClipboard.Selection).simplified())
 
         # only search for limited text
         if clipboardText and (len(clipboardText) < 20):
@@ -621,7 +622,7 @@ function _go() { }
         # TODO
         #self.findDialog.setHasSelection(
             #self.selectedText() != '')
-        if self.findDialog.exec_() != QDialog.Accepted:
+        if self.findDialog.exec_() != QtGui.QDialog.Accepted:
             return
 
         options = QWebPage.FindFlag(0)
@@ -713,7 +714,7 @@ function _go() { }
         printer = QPrinter(QPrinter.HighResolution)
 
         dialog = QPrintDialog(printer, self)
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec_() == QtGui.QDialog.Accepted:
             self.print_(printer)
 
     def slotPageLoaded(self, ok):
@@ -789,7 +790,8 @@ function _go() { }
             exampleMessage = ''
 
         # about looking up selected text
-        lookupShortcut = self._lookupClipboardAction.globalShortcut().toString()
+        lookupShortcut = self._lookupClipboardAction.globalShortcut().toString(
+            QtGui.QKeySequence.NativeText)
         if lookupShortcut:
             shortcutMessage = '<p>%s</p>' \
                 % i18n(u"Use the dictionary together with other software by hitting <em>%1</em> on a selected item or enable <em>Auto-lookup</em> to automatically lookup selected text.",
@@ -942,11 +944,11 @@ function _go() { }
             if value == None:
                 # content hidden and not rendered
                 htmlList.append(self.constructHeading(method,
-                    unicode(self.SECTION_NAMES[method])))
+                    unicode(self.SECTION_NAMES[method].toString())))
             else:
                 if method in self.sectionContentVisible:
                     htmlList.append(self.constructHeading(method,
-                        unicode(self.SECTION_NAMES[method])))
+                        unicode(self.SECTION_NAMES[method].toString())))
 
                 if self.renderThread.hasCachedContent(htmlview.HtmlView, method,
                     value):

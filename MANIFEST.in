@@ -4,7 +4,8 @@ include eclectusqt/data/icons/*.png
 include eclectusqt/data/icons/*.svg
 include eclectusqt/data/icons/*.xpm
 include eclectusqt/data/style.css
-include eclectusqt/forms
+include eclectusqt/locale/*/*/eclectusqt.mo
+include eclectusqt/forms/*.py
 include eclectusqt/ui
 include eclectusqt/eclectusui.rc
 include eclectusqt/eclectus.desktop
