@@ -847,7 +847,12 @@ class KangxiRadicalStrokeCountBuilder(builder.EntryGeneratorBuilder):
                 try:
                     strokeCount = self.cjk.getStrokeCount(radicalForm)
                 except exception.NoInformationError:
-                    strokeCount = 0
+                    try:
+                        equivForm = self.cjk.getRadicalFormEquivalentCharacter(
+                            radicalForm)
+                        strokeCount = self.cjk.getStrokeCount(equivForm)
+                    except exception.NoInformationError:
+                        strokeCount = 0
                 yield(radicalIdx, strokeCount)
 
     PROVIDES = 'KangxiRadicalStrokeCount'
