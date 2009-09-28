@@ -43,7 +43,8 @@ class HandwritingPage(QWidget, HandwritingPageUI.Ui_Form):
 
     WRITING_MODELS = {
         'ja': {'tomoe': {'dictionary': os.path.join(tomoeDictionaryPath,
-            'handwriting-ja.xml')}},
+            'handwriting-ja.xml')},
+            'tegaki': {'recognizer': 'zinnia', 'model': 'Japanese'}},
         'zh-Hans': {'tomoe': {'dictionary': os.path.join(tomoeDictionaryPath,
             'handwriting-zh_CN.xml')},
             'tegaki': {'recognizer': 'zinnia', 'model': 'Simplified Chinese'}},
@@ -64,7 +65,7 @@ class HandwritingPage(QWidget, HandwritingPageUI.Ui_Form):
         if self.pluginConfig:
             self.maximumSize = util.readConfigInt(self.pluginConfig,
                 "Handwriting maximum field size",
-		HandwritingPage.DEFAULT_MAXIMUM_FIELD_SIZE)
+                HandwritingPage.DEFAULT_MAXIMUM_FIELD_SIZE)
             self.maximumResults = util.readConfigInt(self.pluginConfig,
                 "Handwriting maximum results",
                 HandwritingPage.DEFAULT_MAXIMUM_RESULTS)
@@ -207,15 +208,16 @@ class HandwritingPage(QWidget, HandwritingPageUI.Ui_Form):
                         charLinks.append(
                             '<a class="character" href="#lookup(%s)">%s</a>' \
                                 % (encodeBase64(char), char))
-                    html = ' '.join(charLinks)
+                    html = '<span class="character">%s</span>' \
+                        % ' '.join(charLinks)
                 else:
-                    html = '<p class="meta">%s</p>' % unicode(
+                    html = '<span class="meta">%s</span>' % unicode(
                         i18n('No results for the selected character domain'))
 
                 self.handwritingResultView.setHtml(
                     '<html><head><title>Results</title>' \
-                    + '<link rel="StyleSheet" href="file://%s" type="text/css" />' \
-                        % util.getData('style.css')
+                    + '<link rel="StyleSheet" href="%s" type="text/css" />' \
+                        % ('file://' + util.getData('style.css'))
                     + '</head>' \
-                    + '<body><span class="character">%s</span></body>' % html \
+                    + '<body>%s</body>' % html \
                     + '</html>')

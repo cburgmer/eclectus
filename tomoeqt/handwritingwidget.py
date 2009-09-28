@@ -80,16 +80,18 @@ class HandwritingWidget(QtGui.QGraphicsView):
                 self.writing = Writing()
             elif recognizerType == 'tegaki':
                 recognizers = Recognizer.get_available_recognizers()
+
                 if not recognizers:
                     raise Exception('No recognizer available')
 
                 if 'tegaki' in recognizerSettings \
-                    and 'regognizer' in recognizerSettings['tegaki']:
-                    engine = recognizerSettings['tegaki']['regognizer']
+                    and 'recognizer' in recognizerSettings['tegaki']:
+                    engine = recognizerSettings['tegaki']['recognizer']
                     if engine not in recognizers:
                         raise Exception('recognizer not available')
                 else:
                     engine = recognizers.keys()[0]
+
                 recognizer_klass = recognizers[engine]
                 self.recognizer = recognizer_klass()
 
