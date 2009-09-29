@@ -176,7 +176,7 @@ class HandwritingPage(QWidget, HandwritingPageUI.Ui_Form):
 
         self.handwritingView.setDictionary(settings)
 
-        if not errorDisplayed:
+        if not errorDisplayed and not self.handwritingView.strokeCount():
             self.handwritingResultView.setHtml(
                 i18n('Draw a character above'))
 

@@ -49,10 +49,11 @@ class HandwritingWidget(QtGui.QGraphicsView):
     """
     class LineDrawingGraphicsScene(QtGui.QGraphicsScene):
         """Graphics scene for drawing strokes and handling recognizer."""
-        def __init__(self, parent, recognizerSettings={}, size=100):
+        def __init__(self, parent, recognizerSettings=None, size=100):
             QtGui.QGraphicsScene.__init__(self, parent)
 
             self.size = 100
+            self.writing = None
 
             # set pen for handwriting
             self.pen = QtGui.QPen()
@@ -62,10 +63,11 @@ class HandwritingWidget(QtGui.QGraphicsView):
             self.currentStrokeItems = []
 
             self.setSize(size)
-            self.setDictionary(recognizerSettings)
+            if recognizerSettings:
+                self.setDictionary(recognizerSettings)
 
         def setDictionary(self, recognizerSettings={}):
-            self.clear_strokes()
+            #self.clear_strokes()
 
             #initialize the default dictionary and a simple recognizer
             if recognizerType == 'tomoe' \
@@ -77,7 +79,8 @@ class HandwritingWidget(QtGui.QGraphicsView):
                     dictionary=tomoeDict)
 
                 # will encapsulate stroke data
-                self.writing = Writing()
+                if not self.writing:
+                    self.writing = Writing()
             elif recognizerType == 'tegaki':
                 recognizers = Recognizer.get_available_recognizers()
 
@@ -106,13 +109,14 @@ class HandwritingWidget(QtGui.QGraphicsView):
                 self.recognizer.set_model(model)
 
                 # will encapsulate stroke data
-                self.writing = Writing()
+                if not self.writing:
+                    self.writing = Writing()
             else:
                 self.writing = None
 
         def enabled(self):
-            return True
-            # TODO bug return self.writing != None
+            #return True
+            return self.writing != None # TODO bug ?
 
         def setSize(self, size):
             for group in self.strokeItemGroups:
@@ -228,7 +232,7 @@ class HandwritingWidget(QtGui.QGraphicsView):
             point.setX(min(max(0, point.x()), self.size))
             point.setY(min(max(0, point.y()), self.size))
 
-    def __init__(self, parent, recognizerSettings={}, size=100):
+    def __init__(self, parent, recognizerSettings=None, size=100):
         self.scene = HandwritingWidget.LineDrawingGraphicsScene(parent,
             recognizerSettings, size)
 
@@ -248,6 +252,7 @@ class HandwritingWidget(QtGui.QGraphicsView):
     def setDictionary(self, recognizerSettings):
         self.scene.setDictionary(recognizerSettings)
         self.setInteractive(self.recognizerAvailable())
+        self.emit(QtCore.SIGNAL("updated()"))
 
     def setMaximumSize(self, size):
         self.maximumSize = size

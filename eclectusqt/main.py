@@ -423,7 +423,7 @@ class MainWindow(KXmlGuiWindow):
 
         self.setGeometry(x, y, w, h)
 
-    def queryClose(self):
+    def queryExit(self):
         """
         save config data before exiting
         """
@@ -539,7 +539,8 @@ class MainWindow(KXmlGuiWindow):
             miniModeShortcut = unicode(i18n(
                 self.miniModeAction.shortcut().toString()))
             text = unicode(i18n("Mini-mode hides your menubar and toolbars. Press %1 again to get back to normal mode.", miniModeShortcut))
-            lookupShortcut = self.lookupClipboardAction.globalShortcut().toString()
+            lookupShortcut = self.lookupClipboardAction.globalShortcut()\
+                .toString(QtGui.QKeySequence.NativeText)
             if lookupShortcut:
                 text = text + "\n\n" \
                     + unicode(i18n("You may look up entries by selecting a word and pressing %1. Alternatively you can turn on auto-lookup or paste from the clipboard by pressing the middle mouse button.",
