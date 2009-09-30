@@ -1247,7 +1247,7 @@ class CharacterInfo:
         @param includeSimilarCharacters: if C{True} then characters with similar
             visual forms will be included in search.
         @rtype: list of tuples
-        @return: list of pairs of matching characters and their Z-variants
+        @return: list of pairs of matching characters and their glyph
         @todo Impl: Once mapping of similar radical forms exist (e.g. 言 and 訁)
             include here.
         """
@@ -1255,7 +1255,7 @@ class CharacterInfo:
             includeEquivalentRadicalForms, includeSimilarCharacters)
 
         characters = self.characterLookup.getCharactersForEquivalentComponents(
-            equivCharTable, includeAllZVariants=True)
+            equivCharTable, includeAllGlyphs=True)
         seenChars = set()
         charList = []
         for char, _ in characters:
@@ -1288,12 +1288,12 @@ class CharacterInfo:
         @param includeSimilarCharacters: if C{True} then characters with similar
             visual forms will be included in search.
         @rtype: list of tuples
-        @return: list of pairs of matching characters and their Z-variants
+        @return: list of pairs of matching characters and their glyph
         @todo Impl: Once mapping of similar radical forms exist (e.g. 言 and 訁)
             include here.
         @todo Impl: Integrate a table of actual radical forms so we don't
             return *all* components
-        @todo Fix: Dont return components for results of non-locale z-Variants,
+        @todo Fix: Dont return components for results of non-locale glyphs,
             e.g. ⽰ for 福.
         """
         equivCharTable = self.getEquivalentCharTable(componentList,
@@ -1303,7 +1303,7 @@ class CharacterInfo:
         lookupTable = self.characterLookup.db.tables['ComponentLookup']
         strokeCountTable = self.characterLookup.db.tables['StrokeCount']
 
-        joinTables = []         # join over all tables by char and z-Variant
+        joinTables = []         # join over all tables by char and glyph
         filters = []            # filter for locale and component
 
         # generate filter for each component
@@ -1321,7 +1321,7 @@ class CharacterInfo:
                 onclause=and_(
                     table.c.ChineseCharacter \
                         == joinTables[0].c.ChineseCharacter,
-                    table.c.ZVariant == joinTables[0].c.ZVariant))
+                    table.c.Glyph == joinTables[0].c.Glyph))
 
         # join again to get all possible components
         mainAlias = lookupTable.alias('s')
@@ -1329,7 +1329,7 @@ class CharacterInfo:
             onclause=and_(
                 mainAlias.c.ChineseCharacter \
                     == joinTables[0].c.ChineseCharacter,
-                mainAlias.c.ZVariant == joinTables[0].c.ZVariant))
+                mainAlias.c.Glyph == joinTables[0].c.Glyph))
 
         sel = select([mainAlias.c.Component], and_(*filters),
             from_obj=[fromObject], distinct=True)
@@ -1401,7 +1401,7 @@ class CharacterInfo:
                                     "Warning: overwriting conversion rule: '" \
                                         + equiv + "' has to forms '" \
                                         + self.radicalFormLookup[equiv] \
-                                        + "' und '" +  variant + "'")
+                                        + "' and '" +  variant + "'")
                             self.radicalFormLookup[equiv] = variant
                         except cjklib.exception.UnsupportedError:
                             pass
@@ -2268,8 +2268,8 @@ class CharacterInfo:
                 self.dictionaryTable.c[self.headwordAlternativeColumn].label('a'),
                 self.dictionaryTable.c.Reading,
                 self.dictionaryTable.c.Translation],
-                self.dictionaryTable.c.Translation.like(
-                    ' '.join(translationTokens)),
+                self.dictionaryTable.c.Translation.like('%' + 
+                    ' '.join(translationTokens) + '%'),
                 distinct=True))
                 #distinct=True).order_by(*orderBy))
 

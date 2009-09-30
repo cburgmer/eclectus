@@ -54,7 +54,7 @@ class ComponentPage(QWidget, ComponentPageUI.Ui_Form):
                 "Component include variants", str(True)) != "False"
 
             splitterState = util.readConfigString(self.pluginConfig,
-		"Component splitter", "")
+                "Component splitter", "")
             self.componentSplitter.restoreState(QByteArray.fromBase64(
                 str(splitterState)))
         else:

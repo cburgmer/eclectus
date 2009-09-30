@@ -31,7 +31,7 @@
      <item>
       <widget class="QToolButton" name="exportHistoryButton" >
        <property name="text" >
-        <string>&amp;Export...</string>
+        <string>&amp;Export ...</string>
        </property>
        <property name="popupMode" >
         <enum>QToolButton::InstantPopup</enum>

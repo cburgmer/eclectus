@@ -241,7 +241,7 @@ function _go() { }
                 "Dictionary start page", "welcome")
             if self.startPage == 'last':
                 lastPage = util.readConfigString(self.chooserConfig,
-			"Dictionary last page", self.WELCOME_PAGE)
+                    "Dictionary last page", self.WELCOME_PAGE)
                 if lastPage:
                     currentString = lastPage
             else:
