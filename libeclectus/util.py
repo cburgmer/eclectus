@@ -99,9 +99,13 @@ def getTranslation(localLanguage):
 # database
 
 def getDatabaseUrl():
-    from cjklib.util import getConfigSettings
-    configuration = getConfigSettings('Connection')
-    return configuration['url']
+    try:
+        from cjklib.util import getConfigSettings
+        configuration = getConfigSettings('Connection')
+        return configuration['url']
+    except KeyError:
+        print "Cannot find parameter 'url' in config file of cjklib."
+        print "Please check /etc/cjklib.conf or ~/.cjklib.conf"
     # TODO use own database once build support for several databases is given
     #base = os.path.dirname(os.path.abspath(__file__))
     #databaseFile = os.path.join(base, "libeclectus.db")
