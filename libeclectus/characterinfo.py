@@ -37,6 +37,7 @@ from cjklib.dbconnector import DatabaseConnector
 from cjklib import characterlookup
 from cjklib import reading
 from cjklib import exception
+from cjklib.util import cross
 
 from libeclectus import util
 
@@ -777,7 +778,7 @@ class CharacterInfo:
                                 similar.append(modEntity[:-len(b)] + a)
             similarEntities.append(similar)
 
-        similarEntityList = self._crossProduct(similarEntities)
+        similarEntityList = cross(*similarEntities)
 
         # remove exact hits
         if entities in similarEntityList:
@@ -800,7 +801,7 @@ class CharacterInfo:
                             fullEntities.append([entity + '_'])
                     else:
                         fullEntities.append([entity])
-                exactSimilarEntityList.extend(self._crossProduct(fullEntities))
+                exactSimilarEntityList.extend(cross(*fullEntities))
 
             if entities in exactSimilarEntityList:
                 exactSimilarEntityList.remove(entities)
@@ -825,7 +826,7 @@ class CharacterInfo:
                         fullEntities.append([entity + '_'])
                 else:
                     fullEntities.append([entity])
-            return self._crossProduct(fullEntities)
+            return cross(*fullEntities)
 
         return [entities]
 
@@ -1033,47 +1034,6 @@ class CharacterInfo:
             return self.characterLookup.filterDomainCharacters(charList)
         else:
             return charList
-
-    @staticmethod
-    def _crossProduct(singleLists):
-        """
-        Calculates the cross product (aka cartesian product) of sets given as
-        lists.
-
-        Example:
-            >>> ro._crossProduct([['A', 'B'], [1, 2, 3]])
-            [['A', 1], ['A', 2], ['A', 3], ['B', 1], ['B', 2], ['B', 3]]
-
-        @type singleLists: list of lists
-        @param singleLists: a list of list entries containing various elements
-        @rtype: list of lists
-        @return: the cross product of the given sets
-        """
-        # get repeat index for whole set
-        lastRepeat = 1
-        repeatSet = []
-        for elem in singleLists:
-            repeatSet.append(lastRepeat)
-            lastRepeat = lastRepeat * len(elem)
-        repeatEntry = []
-        # get dimension of cartesian product and dimensions of parts
-        newListLength = 1
-        for i in range(0, len(singleLists)):
-            elem = singleLists[len(singleLists) - i - 1]
-            repeatEntry.append(newListLength)
-            newListLength = newListLength * len(elem)
-        repeatEntry.reverse()
-        # create product
-        newList = [[] for i in range(0, newListLength)]
-        lastSetLen = 1
-        for i, listElem in enumerate(singleLists):
-            for j in range(0, repeatSet[i]):
-                for k, elem in enumerate(listElem):
-                    for l in range(0, repeatEntry[i]):
-                        newList[j * lastSetLen + k*repeatEntry[i] \
-                            + l].append(elem)
-            lastSetLen = repeatEntry[i]
-        return newList
 
     def matchCharToEntity(self, charString, reading):
         """
@@ -1654,7 +1614,7 @@ class CharacterInfo:
 
         # build word from single characters
         variants = set([''.join(headwordVariant) for headwordVariant \
-            in self._crossProduct(singleCharacterVariants)])
+            in cross(*singleCharacterVariants)])
         variants.remove(headword)
 
         # if we have a CEDICT type dictionary use additional information
@@ -1675,6 +1635,51 @@ class CharacterInfo:
             return self.db.selectScalars(select(
                 [self.dictionaryTable.c[self.headwordColumn]],
                 self.dictionaryTable.c[self.headwordColumn].in_(variants),
+                distinct=True).order_by('Reading', self.headwordColumn))
+        else:
+            return []
+
+    def getCharacterSimilars(self, char):
+        """
+        Gets a list of variant forms of the given character.
+
+        @type headword: string
+        @param headword: headword
+        @rtype: list of strings
+        @return: headword variant forms
+        """
+        equiv = set(self.getEquivalentCharTable([char],
+            includeEquivalentRadicalForms=False,
+            includeSimilarCharacters=True)[0])
+        if char in equiv:
+            equiv.remove(char)
+        return equiv
+
+    def getHeadwordSimilars(self, headword):
+        """
+        Gets a list of similar forms of the given headword.
+
+        @type headword: string
+        @param headword: headword
+        @rtype: list of strings
+        @return: headword variant forms
+        """
+        similarCharacters = []
+        for char in headword:
+            similarCharacters.append(self.getEquivalentCharTable([char],
+                includeEquivalentRadicalForms=False,
+                includeSimilarCharacters=True)[0])
+
+        # build word from single characters
+        similar = set([''.join(headwordSimilar) for headwordSimilar \
+            in cross(*similarCharacters)])
+        similar.remove(headword)
+
+        if similar:
+            # filter similar character combinations
+            return self.db.selectScalars(select(
+                [self.dictionaryTable.c[self.headwordColumn]],
+                self.dictionaryTable.c[self.headwordColumn].in_(similar),
                 distinct=True).order_by('Reading', self.headwordColumn))
         else:
             return []

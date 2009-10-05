@@ -519,6 +519,33 @@ class HtmlView:
                 + ', '.join(variantLinks) \
                 + '</div>'
 
+    def getSimilarsSection(self, inputString):
+        """Returns a section of headwords with similar shape."""
+        if not self.charInfo.dictionary:
+            if len(inputString) != 1:
+                return ''
+            else:
+                similars = self.charInfo.getCharacterSimilars(inputString)
+        else:
+            similars = self.charInfo.getHeadwordSimilars(inputString)
+
+        similarLinks = []
+        for similar in similars:
+            similarLinks.append('<span class="character">' \
+                + '<a class="character" href="#lookup(%s)">%s</a>' \
+                    % (util.encodeBase64(similar), similar) \
+                + '</span>')
+
+        if not similarLinks:
+            return ''
+        else:
+            return '<div class="similarSection">'\
+                + '<span class="meta">%s</span> ' \
+                    % ngettext("See similar headword:",
+                        "See similar headword:", len(similarLinks)) \
+                + ', '.join(similarLinks) \
+                + '</div>'
+
     def getMeaningSection(self, inputString):
         """
         Gets a list of entries for the given character string, sorted by reading
