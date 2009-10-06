@@ -126,6 +126,7 @@ class DictionaryPage(QWebView):
 
     SECTION_NAMES ={'getMeaningSection': ki18n('Dictionary'),
         'getVariantSection': ki18n('Variant links'),
+        'getSimilarsSection': ki18n('Similar character links'),
         'getVocabularySection': ki18n('Vocabulary'),
         'getStrokeOrderSection': ki18n('Stroke order'),
         'getLinkSection': ki18n('Links'),
@@ -138,13 +139,14 @@ class DictionaryPage(QWebView):
         }
 
     DEFAULT_VIEW_SECTIONS = {'character': ['getGeneralCharacterSection',
-            'getVariantSection', 'getMeaningSection',
+            'getVariantSection', 'getSimilarsSection', 'getMeaningSection',
             'getVocabularySection', 'getStrokeOrderSection',
             'getDecompositionTreeSection', 'getCharacterWithComponentSection',
             'getCharacterWithSamePronunciationSection', 'getLinkSection'],
         'word': ['getGeneralWordSection', 'getVariantSection',
-            'getMeaningSection', 'getHeadwordContainedCharactersSection',
-            'getVocabularySection', 'getLinkSection'],
+            'getSimilarsSection', 'getMeaningSection',
+            'getHeadwordContainedCharactersSection', 'getVocabularySection',
+            'getLinkSection'],
         'search': ['getVocabularySearchSection'],
         'othervocabulary': ['getOtherVocabularySearchSection'],
         'similar': ['getSimilarVocabularySearchSection'],
@@ -152,9 +154,9 @@ class DictionaryPage(QWebView):
 
     DEFAULT_MINI_VIEW_SECTIONS = {'character': [
             'getMiniGeneralCharacterSection', 'getVariantSection',
-            'getMeaningSection'],
+            'getSimilarsSection', 'getMeaningSection'],
         'word': ['getMiniGeneralWordSection', 'getVariantSection',
-            'getHeadwordContainedVocabularySection'],
+            'getSimilarsSection', 'getHeadwordContainedVocabularySection'],
         'search': ['getVocabularySearchSection'],
         'othervocabulary': ['getOtherVocabularySearchSection'],
         'similar': ['getSimilarVocabularySearchSection'],
