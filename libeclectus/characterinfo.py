@@ -182,7 +182,11 @@ class CharacterInfo:
         @type locale: character
         @param locale: I{character locale} (one out of TCJKV)
         """
-        self.db = DatabaseConnector({'url': util.getDatabaseUrl()})
+        databaseUrl = util.getDatabaseUrl()
+        configuration = None
+        if databaseUrl:
+            configuration = {'url': databaseUrl}
+        self.db = DatabaseConnector.getDBConnector(configuration)
 
         self.availableDictionaries = None
 

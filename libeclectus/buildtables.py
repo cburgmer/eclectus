@@ -37,6 +37,7 @@ from cjklib import characterlookup
 from cjklib.reading import ReadingFactory
 from cjklib.build import builder, cli, warn
 from cjklib import exception
+from cjklib.util import UnicodeCSVFileIterator
 
 from libeclectus import util
 
@@ -101,7 +102,7 @@ class BeidaHSKVocabularyBuilder(builder.CSVFileLoader):
         seenHeadwords = set()   # already saved headwords
         doubleEntryCount = 0    # double/tripple entries
         multiEntryCount = 0     # lines with mutiple headwords
-        for line in self.getCSVReader(fileHandle):
+        for line in UnicodeCSVFileIterator(fileHandle):
             # check for level boundary
             if line[0] == '':
                 if line[1][0] in self.LEVELS.keys():
@@ -189,7 +190,8 @@ class WiktionaryHSKVocabularyBuilder(builder.CSVFileLoader):
         traditionalHeadwordLevelDict = {} # headword to level mapping
         tradSimpHeadwordDict = {} # traditional to simplified
         doubleEntryCount = 0 # double/tripple entries
-        for headwordTrad, headwordSimp, level in self.getCSVReader(fileHandle):
+        for headwordTrad, headwordSimp, level \
+            in UnicodeCSVFileIterator(fileHandle):
             # skip headwords already seen
             if headwordTrad in traditionalHeadwordLevelDict:
                 doubleEntryCount = doubleEntryCount + 1
@@ -625,7 +627,7 @@ class CombinedEnglishRadicalTableBuilder(EnglishCSVRadicalTableBuilder,
         fileHandle = codecs.open(contentFile, 'r', 'utf-8')
 
         radicalEntries = {}
-        for line in self.getCSVReader(fileHandle):
+        for line in UnicodeCSVFileIterator(fileHandle):
             if len(line) == 1 and not line[0].strip():
                 continue
             radicalIdx, reading, meaning = line
@@ -856,7 +858,7 @@ class KangxiRadicalStrokeCountBuilder(builder.EntryGeneratorBuilder):
                 yield(radicalIdx, strokeCount)
 
     PROVIDES = 'KangxiRadicalStrokeCount'
-    DEPENDS = ['KangxiRadical', 'StrokeCount']
+    DEPENDS = ['KangxiRadical', 'StrokeCount', 'RadicalEquivalentCharacter']
     COLUMNS = ['RadicalIndex', 'StrokeCount']
     PRIMARY_KEYS = ['RadicalIndex']
     COLUMN_TYPES = {'RadicalIndex': Integer(), 'StrokeCount': Integer()}
