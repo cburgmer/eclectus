@@ -48,13 +48,14 @@ class HandwritingPage(QWidget, HandwritingPageUI.Ui_Form):
         'zh-Hans': {'tomoe': {'dictionary': os.path.join(tomoeDictionaryPath,
             'handwriting-zh_CN.xml')},
             'tegaki': {'recognizer': 'zinnia', 'model': 'Simplified Chinese'}},
+        'zh-Hant': {
+            'tegaki': {'recognizer': 'zinnia', 'model': 'Traditional Chinese'}},
         'zh': {'fallback': {'language': 'zh-Hans'}},
         'zh-cmn-Hans': {'fallback': {'language': 'zh-Hans'}},
-        'zh-cmn-Hant': {'fallback': {'language': 'zh-Hans', 'noisy': True}},
-        'zh-Hant': {'fallback': {'language': 'zh-Hans', 'noisy': True}},
-        'zh-yue': {'fallback': {'language': 'zh-Hans', 'noisy': True}},
+        'zh-cmn-Hant': {'fallback': {'language': 'zh-Hant'}},
+        'zh-yue': {'fallback': {'language': 'zh-Hant'}},
         'zh-yue-Hans': {'fallback': {'language': 'zh-Hans'}},
-        'zh-yue-Hant': {'fallback': {'language': 'zh-Hans', 'noisy': True}},
+        'zh-yue-Hant': {'fallback': {'language': 'zh-Hant'}},
         }
 
     def __init__(self, mainWindow, renderThread, pluginConfig=None):
