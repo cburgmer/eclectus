@@ -103,6 +103,17 @@ class MainWindow(KXmlGuiWindow):
         ('zh-cmn-Hant', 'CFDICT'): ki18n('Traditional Chinese-French (CFDICT)'),
         ('ja', 'EDICT'): ki18n('Japanese-English (EDICT)')}
 
+    CHARACTER_DOMAINS = {
+        'Unicode': ki18n('all characters'),
+        'GB2312': ki18n(
+            'Simplified Chinese: 6763 characters from the GB2312 standard'),
+        'BIG5': ki18n(
+            'Traditional Chinese: 13063 characters from the BIG5 standard'),
+        'BIG5HKSCS': ki18n(
+            'Cantonese with traditional characters: 17575 characters from the BIG5-HKSCS standard'),
+        }
+    """Pretty print strings for character domains."""
+
     CHOOSER_PLUGINS = [
         (radicalpage.RadicalPage, ki18n('&Radicals')),
         (componentpage.ComponentPage, ki18n('&Components')),
@@ -614,7 +625,14 @@ class MainWindow(KXmlGuiWindow):
         charInfo = self.renderThread.getObjectInstance(
             characterinfo.CharacterInfo)
         charDomains = charInfo.getAvailableCharacterDomains()
-        self.charDomainChooserAction.setItems(charDomains)
+
+        charDomainStrings = []
+        for charDomain in charDomains:
+            if charDomain in self.CHARACTER_DOMAINS:
+                charDomainStrings.append(
+                    self.CHARACTER_DOMAINS[charDomain].toString())
+
+        self.charDomainChooserAction.setItems(charDomainStrings)
         currentIndex = charDomains.index(charInfo.characterDomain)
         self.charDomainChooserAction.setCurrentItem(currentIndex)
 
