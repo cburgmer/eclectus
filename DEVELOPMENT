@@ -1,5 +1,5 @@
 Translation
------------
+===========
 Translations are maintained on launchpad:
   https://translations.launchpad.net/eclectus/trunk/
 Translations can be entered directly via the website.
@@ -11,3 +11,33 @@ and can be obtained by running
 To update local *.mo files, run
   ./libeclectus/scripts/compile_mo.sh
 from the project directory.
+
+Packaging
+=========
+Quick step to provide own packages:
+
+Source
+------
+python setup.py sdist
+
+Ubuntu
+------
+Swap "karmic" for "jaunty" if building for the latter, swap "cburgmer" for
+your own launchpad account.
+
+Get a clean checkout:
+$ svn checkout http://eclectus.googlecode.com/svn/trunk/ eclectus-read-only
+$ cd eclectus-read-only
+
+Create a source package
+$ python -c "import stdeb; execfile('setup.py')" sdist_dsc \
+    --debian-version 1 --extra-cfg-file=eclectus.egg-info/karmic_stdeb.cfg
+$ cd deb_dist/eclectus-0.2~karmic/
+$ dpkg-buildpackage -S
+$ cd ..
+$ dput -U ppa:cburgmer/ppa eclectus_0.2~karmic-1_source.changes
+
+Debian
+------
+$ python -c "import stdeb; execfile('setup.py')" bdist_deb \
+    --debian-version 1 --extra-cfg-file=eclectus.egg-info/debian_stdeb.cfg

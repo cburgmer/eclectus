@@ -73,5 +73,4 @@ setup(name='eclectus',
         'Operating System :: OS Independent',
         'Programming Language :: Python',
         'Topic :: Education',
-        'Intended Audience :: Education',
-        'Development Status :: 3 - Alpha',])
+        'Development Status :: 4 - Beta',])

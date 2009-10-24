@@ -32,6 +32,8 @@ try:
     hasPhononSupport = True
 except ImportError:
     hasPhononSupport = False
+except RuntimeError:
+    hasPhononSupport = False
 
 from PyKDE4.kdeui import KIcon, KAction, KToggleAction, KToolBarPopupAction
 from PyKDE4.kdeui import KActionCollection, KStandardAction, KStandardShortcut

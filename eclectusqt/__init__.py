@@ -23,6 +23,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 """
 
 __author__ = "Christoph Burgmer <cburgmer@ira.uka.de>"
-__license__ = 'GNU General Public License v3'
+__license__ = 'GPLv3'
 __url__ = "http://code.google.com/p/eclectus"
 __version__ = "0.1alpha"

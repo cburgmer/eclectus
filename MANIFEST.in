@@ -6,10 +6,12 @@ include eclectusqt/data/icons/*.xpm
 include eclectusqt/data/style.css
 include eclectusqt/locale/*/*/eclectusqt.mo
 include eclectusqt/forms/*.py
-include eclectusqt/ui
+include eclectusqt/ui/*.ui
+include eclectusqt/ui/*.patch
 include eclectusqt/eclectusui.rc
 include eclectusqt/eclectus.desktop
 include eclectusqt/*.py
+include eclectusqt/*.sh
 include libeclectus/data/*.segmentations
 include libeclectus/data/*.csv
 include libeclectus/data/*.sql
