@@ -103,15 +103,15 @@ class MainWindow(KXmlGuiWindow):
         ('zh-cmn-Hant', 'CFDICT'): ki18n('Traditional Chinese-French (CFDICT)'),
         ('ja', 'EDICT'): ki18n('Japanese-English (EDICT)')}
 
-    CHARACTER_DOMAINS = {
-        'Unicode': ki18n('all characters'),
-        'GB2312': ki18n(
-            'Simplified Chinese: 6763 characters from the GB2312 standard'),
-        'BIG5': ki18n(
-            'Traditional Chinese: 13063 characters from the BIG5 standard'),
-        'BIG5HKSCS': ki18n(
-            'Cantonese with traditional characters: 17575 characters from the BIG5-HKSCS standard'),
-        }
+    CHARACTER_DOMAINS = [
+        ('Unicode', ki18n('all characters')),
+        ('GB2312', ki18n(
+            'Simplified Chinese: 6763 characters from the GB2312 standard')),
+        ('BIG5', ki18n(
+            'Traditional Chinese: 13063 characters from the BIG5 standard')),
+        ('BIG5HKSCS', ki18n(
+            'Cantonese with traditional characters: 17575 characters from the BIG5-HKSCS standard')),
+        ]
     """Pretty print strings for character domains."""
 
     CHOOSER_PLUGINS = [
@@ -368,8 +368,8 @@ class MainWindow(KXmlGuiWindow):
             self.charDomainChooserAction)
         self.updateCharDomainSelector()
 
-        self.connect(self.charDomainChooserAction,
-            SIGNAL("triggered(const QString)"), self.charDomainChanged)
+        self.connect(self.charDomainChooserAction, SIGNAL("triggered(int)"),
+            self.charDomainChanged)
 
     def restoreWindowState(self):
         # get saved settings
@@ -627,10 +627,9 @@ class MainWindow(KXmlGuiWindow):
         charDomains = charInfo.getAvailableCharacterDomains()
 
         charDomainStrings = []
-        for charDomain in charDomains:
-            if charDomain in self.CHARACTER_DOMAINS:
-                charDomainStrings.append(
-                    self.CHARACTER_DOMAINS[charDomain].toString())
+        for charDomain, string in self.CHARACTER_DOMAINS:
+            if charDomain in charDomains:
+                charDomainStrings.append(string.toString())
 
         self.charDomainChooserAction.setItems(charDomainStrings)
         currentIndex = charDomains.index(charInfo.characterDomain)
@@ -683,14 +682,15 @@ class MainWindow(KXmlGuiWindow):
 
         self.LAST_READING[(language, dictionary)] = reading
 
-    def charDomainChanged(self, charDomain):
+    def charDomainChanged(self, charDomainIdx):
         charInfo = self.renderThread.getObjectInstance(
             characterinfo.CharacterInfo)
 
         language = charInfo.language
         reading = charInfo.reading
         dictionary = charInfo.dictionary
-        self._reloadObjects(language, reading, dictionary, unicode(charDomain))
+        charDomain, _ = self.CHARACTER_DOMAINS[charDomainIdx]
+        self._reloadObjects(language, reading, dictionary, charDomain)
 
     def slotCharacterComboActivated(self, inputString):
         self.characterCombo.addToHistory(inputString)
