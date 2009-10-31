@@ -1286,6 +1286,13 @@ class CharacterInfo:
                     table.c.ChineseCharacter \
                         == joinTables[0].c.ChineseCharacter,
                     table.c.Glyph == joinTables[0].c.Glyph))
+        # constrain to selected character domain
+        if self.characterLookup.getCharacterDomain() != 'Unicode':
+            domainTblName = self.characterLookup.getCharacterDomain() + 'Set'
+            characterDomainTable = self.characterLookup.db.tables[domainTblName]
+            fromObject = fromObject.join(characterDomainTable,
+                joinTables[-1].c.ChineseCharacter \
+                    == characterDomainTable.c.ChineseCharacter)
 
         # join again to get all possible components
         mainAlias = lookupTable.alias('s')
