@@ -591,8 +591,8 @@ class SQLRenderThread(CachedRenderThread):
     method for classes with database access. The database object needs to be
     given either on the object as .db subobject or explicitly by
     setObjectDBObject().
-    The database object needs to have a getConnection() method returning the
-    connection object which then supports an interrupt() method.
+    The database object needs to have a 'connection' attribute which supports an
+    interrupt() method.
     """
     def __init__(self, parent=0):
         self.dbObjectLock = QMutex(QMutex.Recursive)
@@ -627,7 +627,7 @@ class SQLRenderThread(CachedRenderThread):
                         return False
 
                 self.clearCurrentJob()
-                db.getConnection().interrupt()
+                db.connection.interrupt()
                 return True
             except KeyError:
                 return False

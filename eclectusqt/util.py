@@ -68,11 +68,11 @@ def getDataPaths():
 def readConfigString(config, option, default=None):
     value = config.readEntry(option)
     if not value:
-	return default
+        return default
     elif hasattr(value, "toString"):
-	return value.toString()
+        return value.toString()
     else:
-	return unicode(value)
+        return unicode(value)
 
 def _readConfig(config, option, default, conversionFunc):
     return conversionFunc(readConfigString(config, option, default))
