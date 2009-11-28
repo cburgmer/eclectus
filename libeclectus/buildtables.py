@@ -969,13 +969,22 @@ class SwacAudioCollectionBuilder(builder.EntryGeneratorBuilder):
             self.BASE_DIRECTORY_NAME, self.quiet).generator()
 
 
-class BaseAudioLibreDeMotsChinoisBuilder(SwacAudioCollectionBuilder):
+class SwacChiBalmHsk1Builder(SwacAudioCollectionBuilder):
     """
-    Builds an index on a swac audio collection
+    Builds an index on the chi-balm-hsk1 audio collection.
     """
     PROVIDES = 'Pronunciation_zh_cmn'
 
     BASE_DIRECTORY_NAME = 'chi-balm-hsk1_ogg'
+
+
+class SwacCmnCaenTanBuilder(SwacAudioCollectionBuilder):
+    """
+    Builds an index on the cmn-caen-tan audio collection.
+    """
+    PROVIDES = 'Pronunciation_zh_cmn'
+
+    BASE_DIRECTORY_NAME = 'cmn-caen-tan_ogg'
 
 
 class GlobbingPronunciationBuilder(builder.EntryGeneratorBuilder):
@@ -1154,9 +1163,9 @@ Example: \"%prog build allAvail\""""
     DB_PREFER_BUILDERS = ['WiktionaryHSKVocabularyBuilder',
         'WeightedCEDICTBuilder', 'WeightedCFDictBuilder',
         'WeightedHanDeDictBuilder', 'WeightedCEDICTGRBuilder',
-        'WeightedEDICTBuilder', 'BaseAudioLibreDeMotsChinoisBuilder',
-        'CombinedEnglishRadicalTableBuilder']
+        'WeightedEDICTBuilder', 'CombinedEnglishRadicalTableBuilder']
     """Builders prefered for build process."""
+    # TODO 'SwacCmnCaenTanBuilder'
 
     @classmethod
     def getDefaultOptions(cls):
