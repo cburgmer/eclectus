@@ -22,6 +22,68 @@ import gettext
 import base64
 import os.path
 
+# file paths
+
+FILE_PATHS = {'default': [u'/usr/local/share/eclectus',
+        u'/usr/share/eclectus'],
+    'cmn-caen-tan_ogg': [u'/usr/local/share/eclectus/cmn-caen-tan',
+        u'/usr/share/eclectus/cmn-caen-tan'],
+    'chi-balm-hsk1_ogg': [u'/usr/local/share/eclectus/chi-balm-hsk1',
+        u'/usr/share/eclectus/chi-balm-hsk1'],
+    'bw.png.segment': [
+        u'/usr/local/share/eclectus/bw.png.segment/bw.png.segment',
+        u'/usr/share/eclectus/bw.png.segment/bw.png.segment'],
+    'jbw.png.segment': [
+        u'/usr/local/share/eclectus/bw.png.segment/jbw.png.segment',
+        u'/usr/share/eclectus/bw.png.segment/jbw.png.segment'],
+    'tbw.png.segment': [
+        u'/usr/local/share/eclectus/bw.png.segment/tbw.png.segment',
+        u'/usr/share/eclectus/bw.png.segment/tbw.png.segment'],
+    'bw.png': [u'/usr/local/share/eclectus/bw.png/bw.png',
+        u'/usr/share/eclectus/bw.png/bw.png'],
+    'jbw.png': [u'/usr/local/share/eclectus/bw.png/jbw.png',
+        u'/usr/share/eclectus/bw.png/jbw.png'],
+    'tbw.png': [u'/usr/local/share/eclectus/bw.png/tbw.png',
+        u'/usr/share/eclectus/bw.png/tbw.png'],
+    'order.gif': [u'/usr/local/share/eclectus/order.gif/order.gif',
+        u'/usr/share/eclectus/order.gif/order.gif'],
+    'jorder.gif': [u'/usr/local/share/eclectus/order.gif/jorder.gif',
+        u'/usr/share/eclectus/order.gif/jorder.gif'],
+    'torder.gif': [u'/usr/local/share/eclectus/order.gif/torder.gif',
+        u'/usr/share/eclectus/order.gif/torder.gif'],
+    'red.png': [u'/usr/local/share/eclectus/red.png/red.png',
+        u'/usr/share/eclectus/red.png/red.png'],
+    'jred.png': [u'/usr/local/share/eclectus/red.png/jred.png',
+        u'/usr/share/eclectus/red.png/jred.png'],
+    }
+"""
+File path map. The file paths will be checked in the order given.
+'default' serves as a fall back given special semantics as the search key
+is added to the given default path.
+"""
+
+def locatePath(name):
+    """
+    Locates a external file using a list of paths given in FILE_PATHS. Falls
+    back to subdirectory 'files' in location of this module if no match is
+    found. Returns None if no result
+    """
+    global FILE_PATHS
+    if name in FILE_PATHS:
+        paths = FILE_PATHS[name]
+    else:
+        paths = [os.path.join(path, name) \
+            for path in FILE_PATHS['default']]
+
+    for path in paths:
+        if os.path.exists(path):
+            return path
+    else:
+        modulePath = os.path.dirname(os.path.abspath(__file__))
+        localPath = os.path.join(modulePath, 'files', name)
+        if os.path.exists(localPath):
+            return localPath
+
 # base64 encoding
 
 def encodeBase64(string):

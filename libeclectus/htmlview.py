@@ -24,29 +24,10 @@ import urllib
 import gettext
 
 from libeclectus import util
-#from libeclectus.util import _, ngettext
 
 gettext = ngettext = None
 
 class HtmlView:
-    FILE_PATHS = {'default': [u'/usr/share/eclectus'],
-        'chi-balm-hsk1_ogg': [u'/usr/share/eclectus/chi-balm-hsk1_ogg'],
-        'bw.png.segment': [u'/usr/share/eclectus/commons/bw.png.segment'],
-        'jbw.png.segment': [u'/usr/share/eclectus/commons/jbw.png.segment'],
-        'bw.png': [u'/usr/share/eclectus/commons/bw.png'],
-        'jbw.png': [u'/usr/share/eclectus/commons/jbw.png'],
-        'order.gif': [u'/usr/share/eclectus/commons/order.gif'],
-        'torder.gif': [u'/usr/share/eclectus/commons/torder.gif'],
-        'jorder.gif': [u'/usr/share/eclectus/commons/jorder.gif'],
-        'red.png': [u'/usr/share/eclectus/commons/red.png'],
-        'sod-utf8': [u'/usr/share/eclectus/sod-utf8'],
-        'soda-utf8': [u'/usr/share/eclectus/soda-utf8'],
-        }
-    """
-    File path map. The file paths will be checked in the order given.
-    'default' servers as a fall back given special semantics as the search key
-    is added to the given default path.
-    """
 
     WEB_LINKS = {'all': ['getUnihanLink'],
         'zh-cmn-Hant': ['getCEDICTLink', 'getHanDeDictLink', 'getDictCNLink'],
@@ -109,28 +90,6 @@ class HtmlView:
         global gettext, ngettext
         gettext = t.ugettext
         ngettext = t.ungettext
-
-    @classmethod
-    def locatePath(cls, name):
-        """
-        Locates a external file using a list of paths given in FILE_PATHS. Falls
-        back to subdirectory 'files' in location of this module if no match is
-        found. Returns None if no result
-        """
-        if name in cls.FILE_PATHS:
-            paths = cls.FILE_PATHS[name]
-        else:
-            paths = [os.path.join(path, name) \
-                for path in cls.FILE_PATHS['default']]
-
-        for path in paths:
-            if os.path.exists(path):
-                return path
-        else:
-            modulePath = os.path.dirname(os.path.abspath(__file__))
-            localPath = os.path.join(modulePath, 'files', name)
-            if os.path.exists(localPath):
-                return localPath
 
     def settings(self):
         return {'strokeOrderType': self.strokeOrderType,
@@ -334,7 +293,7 @@ class HtmlView:
 
     def strokeOrderImageSource(imageDirectory, fileType):
         def getStrokeOrder(self, inputString, imageDirectory, fileType):
-            strokeOrderPath = self.locatePath(imageDirectory)
+            strokeOrderPath = util.locatePath(imageDirectory)
 
             filePath = os.path.join(strokeOrderPath, inputString + fileType)
             if os.path.exists(filePath):
@@ -357,7 +316,7 @@ class HtmlView:
                     prefix = self.COMMONS_STROKE_ORDER_PREFIX[language]
                 else:
                     prefix = ''
-                strokeOrderPath = self.locatePath(prefix + imageType)
+                strokeOrderPath = util.locatePath(prefix + imageType)
                 if not strokeOrderPath:
                     continue
                 filePath = os.path.join(strokeOrderPath,
@@ -383,7 +342,7 @@ class HtmlView:
                     prefix = self.COMMONS_STROKE_ORDER_PREFIX[language]
                 else:
                     prefix = ''
-                strokeOrderPath = self.locatePath(
+                strokeOrderPath = util.locatePath(
                     prefix + imageType + '.segment')
                 if not strokeOrderPath:
                     continue
@@ -413,7 +372,7 @@ class HtmlView:
         return lambda cls: util.fontExists(fontFamily)
 
     def strokeOrderImageExists(imageDirectory):
-        return lambda cls: cls.locatePath(imageDirectory) != None
+        return lambda cls: util.locatePath(imageDirectory) != None
 
     STROKE_ORDER_SOURCES = {
         'kanjistrokeorderfont': (strokeOrderFontSource('KanjiStrokeOrders'),
@@ -555,12 +514,12 @@ class HtmlView:
             filePath = ''
             fileName = self.charInfo.getPronunciationFile(reading)
             if fileName:
-                baseDir, subFilePath = fileName.split(os.sep, 1)
-                prependDir = self.locatePath(baseDir)
+                baseDir, _ = fileName.split(os.sep, 1)
+                prependDir = util.locatePath(baseDir)
                 if not prependDir:
                     return '', ''
 
-                path = os.path.join(prependDir, subFilePath)
+                path = os.path.join(prependDir, fileName)
                 if os.path.exists(path):
                     filePath = path
             if filePath:
