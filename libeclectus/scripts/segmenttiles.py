@@ -555,12 +555,18 @@ def getTileBorders(filePath, segmentTiles=windowBasedSegmentation, threshold=5,
         return xBorders, yBorders
 
 def cutImage(filePath, bordersX, bordersY, meanThreshold=253,
-    background='white', keepEmpty=False, verbose=0):
+    background='white', keepEmpty=False, verbose=0, targetDir=None):
 
-    im = Image.open(filePath)
+    try:
+        im = Image.open(filePath)
+    except IOError, e:
+        print >> sys.stderr, "Error reading file %s:" % filePath, e
+        raise
     width, height = im.size
 
-    fileRoot, fileExt = os.path.splitext(filePath)
+    dirPath, fileName = os.path.split(filePath)
+    fileRoot, fileExt = os.path.splitext(fileName)
+    targetDir = targetDir or dirPath
 
     if background == 'black':
         fillColor = (0, 0, 0)
@@ -599,7 +605,8 @@ def cutImage(filePath, bordersX, bordersY, meanThreshold=253,
                 or (background != 'black' and imageColorMean <= meanThreshold):
                 if verbose >= 1:
                     print str(tileIndex),
-                tile.save(fileRoot + '.' + str(tileIndex) + fileExt)
+                tile.save(os.path.join(targetDir,
+                    fileRoot + '.' + str(tileIndex) + fileExt))
                 tileIndex += 1
             else:
                 if verbose >= 1:
@@ -650,6 +657,7 @@ General commands:
   --readfrom=FILE            read the segmentation from a file instead
   --test                     write the segmentation data to stdout, don't
                                actually create the tiles
+  --targetDir                target directory to write tiles too
   -v, --verbose=LEVEL        verbosity level
   -V, --version              show version information
   -h, --help                 show this help"""
@@ -672,7 +680,7 @@ def main():
     try:
         opts, args = getopt.getopt(sys.argv[1:],
             "hVv", ["help", "version", "verbose=", "segmentation=",
-            "background=", "ratio=", "tilesize=", "grid=",
+            "background=", "ratio=", "tilesize=", "grid=", "targetDir=",
             "equaltiles", "keepempty", "threshold=", "test", "readfrom="])
     except getopt.GetoptError:
         # print help information and exit
@@ -699,6 +707,7 @@ def main():
     keepEmpty = False
     readfrom = None
     testRun = False
+    targetDir = None
 
     for o, a in opts:
         a = a.decode(default_encoding)
@@ -792,6 +801,10 @@ def main():
         elif o in ("--test"):
             testRun = True
 
+        # target directory
+        elif o in ("--targetDir"):
+            targetDir = a
+
     if threshold == None:
         threshold = defaultThreshold
 
@@ -873,10 +886,13 @@ def main():
                     + str(len(bordersY) - 1) \
                     + ', (' + ','.join([str(b) for b in bordersX]) + '), (' \
                     + ','.join([str(b) for b in bordersY]) + ')'
-            cutImage(fileName, bordersX, bordersY, background=background,
-                keepEmpty=keepEmpty, verbose=verbose)
-            if verbose == 0:
-                print "finished"
+            try:
+                cutImage(fileName, bordersX, bordersY, background=background,
+                    keepEmpty=keepEmpty, verbose=verbose, targetDir=targetDir)
+                if verbose == 0:
+                    print "finished"
+            except IOError:
+                pass
 
 
 if __name__ == '__main__':
