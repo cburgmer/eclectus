@@ -293,6 +293,7 @@ class CharacterInfo:
                     self.pronunciationLookup[availReading] \
                         = self.pronunciationLookup[pronReading]
 
+        self._availableCharacterDomains = self.characterLookup.getAvailableCharacterDomains() # TODO
     #{ Settings
 
     def guessLanguage(self):
@@ -388,7 +389,8 @@ class CharacterInfo:
         return compatible
 
     def getAvailableCharacterDomains(self):
-        return self.characterLookup.getAvailableCharacterDomains()
+        return self._availableCharacterDomains
+        #return self.characterLookup.getAvailableCharacterDomains()
 
     def getUpdateVersions(self, tableNames):
         if tableNames and self.db.hasTable('UpdateVersion'):
