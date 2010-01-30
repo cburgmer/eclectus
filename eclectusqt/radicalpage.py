@@ -75,7 +75,7 @@ for(var i = 0; i < trs.length; i++)
 
         if self.pluginConfig:
             self.includeAllRadicals = self.pluginConfig.readEntry(
-                "Radical include all", str(True)) != "False"
+                "Radical include all", str(False)) != "False"
         else:
             self.includeAllRadicals = True
 
