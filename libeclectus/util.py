@@ -158,6 +158,31 @@ def getTranslation(localLanguage):
             fallback=True)
     return t
 
+# script classes
+
+UNICODE_SCRIPT_CLASSES = {'Han': [('2E80', '2E99'), ('2E9B', '2EF3'),
+        ('2F00', '2FD5'), '3005', '3007', ('3021', '3029'),
+        ('3038', '303A'), '303B', ('3400', '4DB5'), ('4E00', '9FCB'),
+        ('F900', 'FA2D'), ('FA30', 'FA6D'), ('FA70', 'FAD9'),
+        ('20000', '2A6D6'), ('2A700', '2B734'), ('2F800', '2FA1D')],
+    'Hiragana': [('3041', '3096'), ('309D', '309E'), '309F'],
+    'Katakana': [('30A1', '30FA'), ('30FD', '30FE'), '30FF',
+        ('31F0', '31FF'), ('32D0', '32FE'), ('3300', '3357'),
+        ('FF66', 'FF6F'), ('FF71', 'FF9D')],
+    'Hangul': [('1100', '1159'), ('115F', '11A2'), ('11A8', '11F9'),
+        ('3131', '318E'), ('3200', '321E'), ('3260', '327E'),
+        ('AC00', 'D7A3'), ('FFA0', 'FFBE'), ('FFC2', 'FFC7'),
+        ('FFCA', 'FFCF'), ('FFD2', 'FFD7'), ('FFDA', 'FFDC')],
+    'Bopomofo': [('3105', '312D'), ('31A0', '31B7')],
+}
+"""
+Mapping of CJK scripts to Unicode character ranges taken from
+U{http://www.unicode.org/Public/5.1.0/ucd/Scripts.txt}.
+
+Tuples are ranges C{from} C{to} and single entries reprsent single
+characters.
+"""
+
 # database
 
 def getDatabaseUrl():

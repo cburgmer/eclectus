@@ -25,6 +25,7 @@ import types
 import sys
 import os
 import re
+import itertools
 import xml.sax
 import bz2
 from datetime import datetime
@@ -37,7 +38,7 @@ from cjklib import characterlookup
 from cjklib.reading import ReadingFactory
 from cjklib.build import builder, cli, warn
 from cjklib import exception
-from cjklib.util import UnicodeCSVFileIterator
+from cjklib.util import UnicodeCSVFileIterator, CharacterRangeIterator
 
 from libeclectus import util
 
@@ -50,6 +51,40 @@ class UpdateVersionBuilder(builder.EntryGeneratorBuilder):
 
     def getGenerator(self):
         return iter([])
+
+
+class KanaExtendedCharacterSetBuilder(object):
+    BASE_BUILDER_CLASS = None
+
+    def toTuple(self, iterator):
+        for char in iterator:
+            yield (char, )
+
+    def getGenerator(self):
+        base = self.BASE_BUILDER_CLASS.getGenerator(self)
+
+        kanaRanges = []
+        kanaRanges.extend(util.UNICODE_SCRIPT_CLASSES['Hiragana'])
+        kanaRanges.extend(util.UNICODE_SCRIPT_CLASSES['Katakana'])
+        kana = CharacterRangeIterator(kanaRanges)
+
+        return itertools.chain(self.toTuple(kana), base)
+
+
+class JISX0208SetExtendedBuilder(KanaExtendedCharacterSetBuilder,
+    builder.JISX0208SetBuilder):
+    """
+    Extends the set of the builder for X{JIS X 0208} by Kanas.
+    """
+    BASE_BUILDER_CLASS = builder.JISX0208SetBuilder
+
+
+class JISX0208_0213SetExtendedBuilder(KanaExtendedCharacterSetBuilder,
+    builder.JISX0208_0213SetBuilder):
+    """
+    Extends the set of the builder for X{JIS X 0208} and X{JIS X 0213} by Kanas.
+    """
+    BASE_BUILDER_CLASS = builder.JISX0208_0213SetBuilder
 
 
 class SimilarCharactersBuilder(builder.CSVFileLoader):
@@ -1142,7 +1177,6 @@ class ChineseLessonsComMandarinPronunciation(GlobbingPronunciationBuilder):
 
 class EclectusCommandLineBuilder(cli.CommandLineBuilder):
     DESCRIPTION = """Builds the database for Eclectus.
-The database is accessed according to the settings of cjklib in cjklib.conf.
 Example: \"%prog build allAvail\""""
 
     BUILD_GROUPS = {
@@ -1152,11 +1186,13 @@ Example: \"%prog build allAvail\""""
             'RadicalTable_zh_cmn__de', 'RadicalTable_zh_cmn__en',
             'KangxiRadicalStrokeCount', 'EDICT', 'CEDICT', 'CEDICTGR', 'CFDICT',
             'HanDeDict', 'UpdateVersion', 'Pronunciation_zh_cmn',
-            'Pronunciation_zh_yue'],
+            'Pronunciation_zh_yue', 'JISX0208Set', 'JISX0208_0213Set',
+            'EduTwIndex'],
         'base': ['SimilarCharacters', 'KangxiRadicalTable',
-            'KangxiRadicalStrokeCount', 'RadicalTable_zh_cmn__en'],
+            'KangxiRadicalStrokeCount', 'RadicalTable_zh_cmn__en',
+            'EduTwIndex'],
         'zh-cmn': ['RadicalNames_zh_cmn', 'Pronunciation_zh_cmn'],
-        'ja': ['RadicalTable_ja__en'],
+        'ja': ['RadicalTable_ja__en', 'JISX0208Set', 'JISX0208_0213Set'],
         'EDICT_related': ['UpdateVersion'],
         'CEDICT_related': ['UpdateVersion'],
         'CEDICTGR_related': ['UpdateVersion'],
@@ -1167,7 +1203,8 @@ Example: \"%prog build allAvail\""""
     DB_PREFER_BUILDERS = ['WiktionaryHSKVocabularyBuilder',
         'WeightedCEDICTBuilder', 'WeightedCFDictBuilder',
         'WeightedHanDeDictBuilder', 'WeightedCEDICTGRBuilder',
-        'WeightedEDICTBuilder', 'CombinedEnglishRadicalTableBuilder']
+        'WeightedEDICTBuilder', 'CombinedEnglishRadicalTableBuilder',
+        'JISX0208SetExtendedBuilder', 'JISX0208_0213SetExtendedBuilder']
     """Builders prefered for build process."""
     # TODO 'SwacCmnCaenTanBuilder'
 

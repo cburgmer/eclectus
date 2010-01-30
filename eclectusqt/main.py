@@ -105,11 +105,15 @@ class MainWindow(KXmlGuiWindow):
     CHARACTER_DOMAINS = [
         ('Unicode', ki18n('all characters')),
         ('GB2312', ki18n(
-            'Simplified Chinese: 6763 characters from the GB2312 standard')),
+            'Simplified Chinese: 6763 characters from standard GB2312')),
         ('BIG5', ki18n(
-            'Traditional Chinese: 13063 characters from the BIG5 standard')),
+            'Traditional Chinese: 13063 characters from standard BIG5')),
         ('BIG5HKSCS', ki18n(
-            'Cantonese with traditional characters: 17575 characters from the BIG5-HKSCS standard')),
+            'Cantonese with traditional characters: 17575 characters from standard BIG5-HKSCS')),
+        ('JISX0208', ki18n(
+            'Japanese: 6356 characters from standard JIS X 0208')),
+        ('JISX0208_0213', ki18n(
+            'Japanese: 9748 characters from standards JIS X 0208/0213')),
         ]
     """Pretty print strings for character domains."""
 
