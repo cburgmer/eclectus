@@ -6,9 +6,9 @@ FILES = index.tags.txt index.xml.bz2 package.xml
 install:
 	list='$(SUBDIRS)'; for subdir in $$list; do \
 	  install -d $(installpath)/chi-balm-hsk1_ogg/$$subdir/ ; \
-	  install chi-balm-hsk1_ogg/$$subdir/* $(installpath)/chi-balm-hsk1_ogg/$$subdir/ ; \
+	  install -p -m 644 chi-balm-hsk1_ogg/$$subdir/* $(installpath)/chi-balm-hsk1_ogg/$$subdir/ ; \
 	done;
 	list='$(FILES)'; for file in $$list; do \
-	  install chi-balm-hsk1_ogg/$$file $(installpath)/chi-balm-hsk1_ogg/ ; \
+	  install -p -m 644 chi-balm-hsk1_ogg/$$file $(installpath)/chi-balm-hsk1_ogg/ ; \
 	done;
-	install chi-balm-hsk1.db $(installpath)/
+	install -p -m 644 chi-balm-hsk1.db $(installpath)/
