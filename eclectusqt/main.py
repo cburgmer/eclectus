@@ -45,14 +45,13 @@ from PyKDE4.kdeui import KStandardShortcut, KStandardGuiItem, KHistoryComboBox
 try:
     import cjklib
     try:
-        # warn while in alpha phase
+        # check version
         from distutils import version
         cjklibVersion = version.LooseVersion(cjklib.__version__)
-        if cjklibVersion != '0.1alpha' \
-            and cjklibVersion < version.LooseVersion('0.1alpha-svn20090930'):
+        if (cjklibVersion != '0.3'
+            and cjklibVersion <= version.LooseVersion('0.2')):
             import logging
-            logging.warn('Your cjklib version is too old.' \
-                + ' You might experience difficulties!')
+            logging.warn('Your cjklib version is too old.')
     except ImportError:
         pass
 except ImportError:
