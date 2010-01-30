@@ -1,13 +1,12 @@
-Eclectus is a small Han character dictionary especially designed for
-learners of Chinese character based languages like Mandarin Chinese or
-Japanese.
+Eclectus is a small Han character dictionary designed for learners of Chinese
+character based languages like Mandarin Chinese or Japanese.
 
 Features
 --------
   * Supports EDICT and CEDICT style dictionaries,
   * currently supports Japanese, Mandarin Chinese (traditional and
     simplified), Cantonese and Korean,
-  * works without a background dictionary (though limited),
+  * works without a dictionary (though limited),
   * supported romanisations/character readings: Kana, Pinyin, Wade-Giles,
     Gwoyeu Romatzyh, IPA, Jyutping, Cantonese Yale, Hangul,
   * modular support for adding further character readings,
@@ -27,6 +26,7 @@ Features
   * stroke order and pronunciation as audio,
   * dictionary update function.
 
+
 Dependencies
 ------------
   * Python
@@ -37,35 +37,37 @@ Dependencies
   * PyKDE4, Python bindings for KDE
   * cjklib, Han character library
 
+
 Installing
 ----------
 Once downloaded/extracted Eclectus can be installed on the system by running:
 
-# python setup.py install
+$ python setup.py install
 
-This step isn't needed when installing from a binary package (.deb, .rpm).
-It is possible to run Eclectus from the source directory.
+If you pulled from SVN make sure you create the base tables before the install:
+$ python -m libeclectus/buildtables build base \
+    --database=sqlite:///libeclectus/libeclectus.db
 
-Make sure the user running Eclectus has write access to the database. Otherwise
-run the following as root:
+To install optional data used by Eclectus do:
+$ cd libeclectus/files
+$ make cmn-caen-tan
+$ make bw.png.segment
 
-# ./libeclectus/buildtables.py build base
+You now need to install these files:
+$ cd build/cmn-caen-tan/
+$ sudo make install
+$ cd ../../
+$ cd build/bw.png.segment/
+$ sudo make install
 
-To install optional data used by Eclectus run
-# cd libeclectus/files
-# make chi-balm-hsk1_ogg
-# make bw.png.segment
-If you haven't installed the Kanji stroke order font or you prefer another
+If you haven't installed the Kanji stroke order font or you prefer a different
 source you can choose between
-# make red.png
+$ make red.png
 or
-# make order.gif
+$ make order.gif
 
-If you installed Eclectus using the first step you also need to install
-these files:
-# sudo make install
 
-Contributing
-------------
-If you are interested in contributing to Eclectus or have any comments, please
-contact <cburgmer@ira.uka.de>.
+Contact
+-------
+If you are interested in the development to Eclectus, join
+eclectus-devel@googlegroups.com (http://groups.google.com/group/eclectus-devel).

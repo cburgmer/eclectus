@@ -43,7 +43,9 @@ def moPathList(targetDir, sourceDir, globPattern):
 setup(name='eclectus',
     version=VERSION,
     description='Han character dictionary',
-    long_description="Eclectus is a small Han character dictionary especially designed for learners of Chinese character based languages like Mandarin Chinese or Japanese.",
+    long_description="Eclectus is a small Han character dictionary"
+        " designed for learners of Chinese character based languages"
+        " like Mandarin Chinese or Japanese.",
     author=AUTHOR,
     author_email=EMAIL,
     url=URL,
@@ -60,7 +62,8 @@ setup(name='eclectus',
             ['eclectusqt/eclectusui.rc', 'eclectusqt/data/style.css'] \
                 + glob.glob('eclectusqt/data/*.png') \
                 + glob.glob('eclectusqt/data/*.svg')),
-        ('share/doc/eclectus/', ['README', 'changelog', 'COPYING']),
+        ('share/doc/eclectus/', ['README', 'changelog', 'COPYING',
+            'DEVELOPMENT']),
         (os.path.join(iconsTarget, 'eclectus'),
             glob.glob('eclectusqt/data/icons/*.png')),
         (iconsTarget, ['eclectusqt/data/icons/eclectus.png']),
