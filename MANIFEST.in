@@ -33,6 +33,7 @@ include libeclectus/files/chi-balm-hsk1/COPYING.chi-balm-hsk1
 include libeclectus/scripts/*.py
 include libeclectus/scripts/*.sh
 include libeclectus/*.py
+include libeclectus/libeclectus.db
 include tomoeqt/*.py
 include *.py
 include eclectus

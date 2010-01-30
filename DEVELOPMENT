@@ -16,6 +16,14 @@ Packaging
 =========
 Quick step to provide own packages:
 
+Get a clean checkout:
+$ svn checkout http://eclectus.googlecode.com/svn/trunk/ eclectus-read-only
+$ cd eclectus-read-only
+
+Create the database:
+$ python -m libeclectus/buildtables build base \
+    --database=sqlite:///libeclectus/libeclectus.db
+
 Source
 ------
 python setup.py sdist
@@ -24,10 +32,6 @@ Ubuntu
 ------
 Swap "karmic" for "jaunty" if building for the latter, swap "cburgmer" for
 your own launchpad account.
-
-Get a clean checkout:
-$ svn checkout http://eclectus.googlecode.com/svn/trunk/ eclectus-read-only
-$ cd eclectus-read-only
 
 Create a source package
 $ python -c "import stdeb; execfile('setup.py')" sdist_dsc \

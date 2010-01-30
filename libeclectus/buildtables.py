@@ -1153,11 +1153,15 @@ Example: \"%prog build allAvail\""""
             'KangxiRadicalStrokeCount', 'EDICT', 'CEDICT', 'CEDICTGR', 'CFDICT',
             'HanDeDict', 'UpdateVersion', 'Pronunciation_zh_cmn',
             'Pronunciation_zh_yue'],
-        'base': ['UpdateVersion', 'SimilarCharacters', 'KangxiRadicalTable',
+        'base': ['SimilarCharacters', 'KangxiRadicalTable',
             'KangxiRadicalStrokeCount', 'RadicalTable_zh_cmn__en'],
         'zh-cmn': ['RadicalNames_zh_cmn', 'Pronunciation_zh_cmn'],
         'ja': ['RadicalTable_ja__en'],
-        'HanDeDict_related': ['RadicalTable_zh_cmn__de'],
+        'EDICT_related': ['UpdateVersion'],
+        'CEDICT_related': ['UpdateVersion'],
+        'CEDICTGR_related': ['UpdateVersion'],
+        'HanDeDict_related': ['RadicalTable_zh_cmn__de', 'UpdateVersion'],
+        'CFDICT_related': ['UpdateVersion'],
     }
 
     DB_PREFER_BUILDERS = ['WiktionaryHSKVocabularyBuilder',

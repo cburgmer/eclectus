@@ -50,7 +50,7 @@ setup(name='eclectus',
     packages=['eclectusqt', 'eclectusqt/forms', 'libeclectus', 'tomoeqt'],
     package_dir={'eclectusqt': 'eclectusqt'},
     package_data={'libeclectus': ['data/*.csv', 'data/*.sql',
-        'locale/*/libeclectus.mo']},
+        'locale/*/libeclectus.mo', 'libeclectus.db']},
     scripts=['eclectus'],
     data_files=[
         #('share/doc/eclectus/scripts',
