@@ -183,6 +183,32 @@ Tuples are ranges C{from} C{to} and single entries reprsent single
 characters.
 """
 
+_codepointRangeDict = None
+
+def getCJKScriptClass(char):
+    """
+    Returns the character's CJK-script, C{None} if not known or not a CJK
+    script.
+    """
+    global _codepointRangeDict, UNICODE_SCRIPT_CLASSES
+    if _codepointRangeDict is None:
+        _codepointRangeDict = {}
+        for scriptClass, ranges in UNICODE_SCRIPT_CLASSES.items():
+            for charRange in ranges:
+                if type(charRange) == type(()):
+                    rangeFrom, rangeTo = charRange
+                else:
+                    rangeFrom, rangeTo = (charRange, charRange)
+                _codepointRangeDict[(int(rangeFrom, 16),
+                    int(rangeTo, 16))] = scriptClass
+
+    for charRange, scriptClass in _codepointRangeDict.items():
+        rangeFrom, rangeTo = charRange
+        if rangeFrom <= ord(char) and ord(char) <= rangeTo:
+            return scriptClass
+    else:
+        return None
+
 # database
 
 def getDatabaseUrl():

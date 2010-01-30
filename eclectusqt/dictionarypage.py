@@ -45,7 +45,7 @@ from eclectusqt import util
 
 from libeclectus import characterinfo
 from libeclectus import htmlview
-from libeclectus.util import encodeBase64, decodeBase64
+from libeclectus.util import encodeBase64, decodeBase64, getCJKScriptClass
 
 class BrowsingHistory(QObject):
     """
@@ -219,32 +219,32 @@ function _go() { }
     # TODO using alert will currently cause a crash
     """ECMAscript code to change test in svg image."""
 
-    def __init__(self, mainWindow, renderThread, chooserConfig=None):
+    def __init__(self, mainWindow, renderThread, pluginConfig=None):
         QWebView.__init__(self, mainWindow)
         self.renderThread = renderThread
-        self.chooserConfig = chooserConfig
+        self.pluginConfig = pluginConfig
 
         self.hiddenSections = set(self.DEFAULT_HIDDEN_SECTIONS)
         self.findHistory = []
         self.startPage = 'welcome'
         currentString = self.WELCOME_PAGE
 
-        if self.chooserConfig:
-            hiddenSections = util.readConfigString(self.chooserConfig,
+        if self.pluginConfig:
+            hiddenSections = util.readConfigString(self.pluginConfig,
                 "Dictionary hidden sections", None)
             if hiddenSections:
                 self.hiddenSections = set([unicode(s) for s \
                     in hiddenSections.split(',')])
 
-            findHistory = util.readConfigString(self.chooserConfig,
+            findHistory = util.readConfigString(self.pluginConfig,
                 "Dictionary find history", None)
             if findHistory:
                 self.findHistory = findHistory.split(',')
 
-            self.startPage = util.readConfigString(self.chooserConfig,
+            self.startPage = util.readConfigString(self.pluginConfig,
                 "Dictionary start page", "welcome")
             if self.startPage == 'last':
-                lastPage = util.readConfigString(self.chooserConfig,
+                lastPage = util.readConfigString(self.pluginConfig,
                     "Dictionary last page", self.WELCOME_PAGE)
                 if lastPage:
                     currentString = lastPage
@@ -937,7 +937,7 @@ function _go() { }
         Simple function for telling if a non Chinese character is present.
         """
         for char in string:
-            if characterinfo.CharacterInfo.getCJKScriptClass(char) != 'Han':
+            if getCJKScriptClass(char) != 'Han':
                 return True
         return False
 
@@ -972,24 +972,24 @@ function _go() { }
             + '<h2>' + text + '</h2></a>'
 
     def writeSettings(self):
-        if self.chooserConfig:
-            self.chooserConfig.writeEntry("Dictionary hidden sections",
+        if self.pluginConfig:
+            self.pluginConfig.writeEntry("Dictionary hidden sections",
                 ','.join(self.hiddenSections))
 
             if self.findDialog:
-                self.chooserConfig.writeEntry("Dictionary find history",
+                self.pluginConfig.writeEntry("Dictionary find history",
                     self.findDialog.findHistory())
             else:
-                self.chooserConfig.writeEntry("Dictionary find history",
+                self.pluginConfig.writeEntry("Dictionary find history",
                     self.findHistory)
 
-            self.chooserConfig.writeEntry("Dictionary start page",
+            self.pluginConfig.writeEntry("Dictionary start page",
                 self.startPage)
             if self.startPage == 'last':
-                self.chooserConfig.writeEntry("Dictionary last page",
+                self.pluginConfig.writeEntry("Dictionary last page",
                     unicode(self.history.current()))
             else:
-                self.chooserConfig.writeEntry("Dictionary last page", '')
+                self.pluginConfig.writeEntry("Dictionary last page", '')
 
     def contentRendered(self, id, classObject, method, args, param, content):
         if classObject == htmlview.HtmlView \

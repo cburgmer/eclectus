@@ -73,6 +73,7 @@ import eclectusqt
 
 from libeclectus import characterinfo
 from libeclectus import htmlview
+from libeclectus.util import getCJKScriptClass
 
 doDebug = 1
 
@@ -733,7 +734,7 @@ class MainWindow(KXmlGuiWindow):
         is present.
         """
         for char in string:
-            if characterinfo.CharacterInfo.getCJKScriptClass(char) != None:
+            if getCJKScriptClass(char) != None:
                 return True
         return False
 
