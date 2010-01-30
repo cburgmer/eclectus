@@ -792,7 +792,7 @@ def run():
     aboutData = KAboutData(appName, catalog, programName, version, description,
         license, copyright, text, homePage, bugEmail)
     aboutData.addAuthor(ki18n("Christoph Burgmer"), ki18n("Developer"),
-        "cburgmer@ira.uka.de", "http://www.stud.uni-karlsruhe.de/~uyhc")
+        "cburgmer@ira.uka.de", "http://cburgmer.nfshost.com/")
     aboutData.setCustomAuthorText(ki18n("Please use %1 to report bugs.")\
             .subs(bugAddress),
         ki18n('Please use %1 to report bugs.')\
@@ -807,7 +807,7 @@ def run():
     aboutData.addCredit(ki18n("Tomoe developers"),
         ki18n("Tomoe handwriting recognition"),
         'tomoe-devel@lists.sourceforge.net', 'http://tomoe.sourceforge.jp')
-    aboutData.addCredit(ki18n("Mathieu Blondel"),
+    aboutData.addCredit(ki18n("Mathieu Blondel and the Tegaki contributors"),
         ki18n("Tegaki handwriting recognition"),
         u'mathieu ÂT mblondel DÔT org'.encode('utf8'),
         'http://tegaki.sourceforge.net')
@@ -816,10 +816,11 @@ def run():
     aboutData.addCredit(ki18n("Commons Stroke Order Project"),
         ki18n("Stroke order pictures"), '',
         'http://commons.wikimedia.org/wiki/Commons:Stroke_Order_Project')
-    aboutData.addCredit(ki18n("Tim Eyre and the Wadoku Project"),
+    aboutData.addCredit(ki18n("Tim Eyre, Ulrich Apel and the Wadoku Project"),
         ki18n("Kanji stroke order font"), '',
         'http://sites.google.com/site/nihilistorguk/')
-    aboutData.addCredit(ki18n("Wei Gao, Vion Nicolas and the Shtooka Project"),
+    aboutData.addCredit(
+        ki18n("Yue Tan, Wei Gao, Vion Nicolas and the Shtooka Project"),
         ki18n("Pronunciation examples for Mandarin"), '',
         'http://shtooka.net')
 
