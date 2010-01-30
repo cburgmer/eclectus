@@ -399,7 +399,7 @@ class WeightedEDICTFormatBuilder(builder.EDICTFormatBuilder):
         self.removeVersion()
 
     def removeVersion(self):
-        if not self.db.engine.has_table('UpdateVersion'):
+        if not self.db.mainHasTable('UpdateVersion'):
             return
 
         table = self.db.tables['UpdateVersion']
@@ -412,7 +412,7 @@ class WeightedEDICTFormatBuilder(builder.EDICTFormatBuilder):
             raise
 
     def insertVersion(self, date):
-        if not self.db.engine.has_table('UpdateVersion'):
+        if not self.db.mainHasTable('UpdateVersion'):
             return
 
         self.removeVersion()

@@ -37,12 +37,7 @@ from PyKDE4.kdeui import KAction, KActionCollection
 
 from sqlalchemy.exceptions import OperationalError
 
-try:
-    from cjklib import build
-except ImportError:
-    print >>sys.stderr, \
-        "Please install cjklib from http://code.google.com/p/cjklib"
-    sys.exit(1)
+from cjklib import build
 
 from eclectusqt import util
 
@@ -60,8 +55,6 @@ class UpdateDialog(KDialog):
         self.setCaption(i18n("Install/Update Dictionaries"))
         self.setButtons(KDialog.ButtonCode(KDialog.Close))
         self.enableButton(KDialog.Cancel, False)
-
-        self.installing = False
 
         # TODO can we defer the creationg of the update widget until the dialog is shown?
         self.updateWidget = UpdateWidget(mainWindow, renderThread, pluginConfig)
@@ -141,88 +134,24 @@ class UpdateDialog(KDialog):
                 self.currentJob = self.renderThread.enqueue(
                     build.DatabaseBuilder, 'optimize')
 
-    def databaseHasBase(self):
-        """
-        Checks if the database holds the basic tables Eclectus needs to operate.
-        @rtype: boolean
-        @return: True if base tables as described in
-            L{EclectusCommandLineBuilder.BUILD_GROUPS} exists, False otherwise
-        """
-        if 'base' in EclectusCommandLineBuilder.BUILD_GROUPS:
-            charInfo = self.renderThread.getObjectInstance(
-                characterinfo.CharacterInfo)
-            db = charInfo.db
-            for table in EclectusCommandLineBuilder.BUILD_GROUPS['base']:
-                if not db.engine.has_table(table):
-                    return False
-        return True
-
-    def installBase(self):
-        self.installing = True
-        self.loadDatabaseBuilder()
-        QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
-
-        if 'base' not in EclectusCommandLineBuilder.BUILD_GROUPS:
-            raise Exception('Do not know how to create base tables')
-        dbBuild = self.renderThread.getObjectInstance(build.DatabaseBuilder)
-        dbBuild.rebuildExisting = False
-        self.currentJob = self.renderThread.enqueue(build.DatabaseBuilder,
-            'build', EclectusCommandLineBuilder.BUILD_GROUPS['base'])
-
     def loadDatabaseBuilder(self):
         if not self.renderThread.hasObject(build.DatabaseBuilder):
             options = EclectusCommandLineBuilder.getDefaultOptions()
-            self.renderThread.setObject(build.DatabaseBuilder, **options)
 
-    def _reloadObjects(self):
-        self.renderThread.reloadObject(characterinfo.CharacterInfo)
+            charInfo = self.renderThread.getObjectInstance(
+                characterinfo.CharacterInfo)
+            db = charInfo.db
 
-        charInfo = self.renderThread.getObjectInstance(
-            characterinfo.CharacterInfo)
-        htmlView = self.renderThread.getObjectInstance(
-            htmlview.HtmlView)
-        htmlViewSettings = htmlView.settings()
-        self.renderThread.setCachedObject(htmlview.HtmlView, charInfo,
-            **htmlViewSettings)
+            self.renderThread.setObject(build.DatabaseBuilder, dbConnectInst=db,
+                **options)
 
     def contentRendered(self, id, classObject, method, args, param, content):
         if classObject == build.DatabaseBuilder and method == 'optimize':
             QApplication.restoreOverrideCursor()
-        elif classObject == build.DatabaseBuilder and method == 'build':
-            # reload as content may change due to different database content
-            print "done"
-            self._reloadObjects()
-            if self.installing:
-                self.installing = False
-                self.emit(SIGNAL("baseTablesInstalled"))
-
-        elif classObject == build.DatabaseBuilder and method == 'remove':
-            # reload as content may change due to different database content
-            self._reloadObjects()
 
     def renderingFailed(self, id, classObject, method, args, param, e,
             stacktrace):
-        if classObject == build.DatabaseBuilder and method == 'build':
-            if self.installing:
-                print >>sys.stderr, 'fail'
-                #print >>sys.stderr, stacktrace
-                if isinstance(e, OperationalError):
-                    try:
-                        dbBuild = self.renderThread.getObjectInstance(
-                            build.DatabaseBuilder)
-                        appendMsg = ''
-                        if dbBuild.db.databaseUrl \
-                            and dbBuild.db.databaseUrl.startswith('sqlite'):
-                            appendMsg = ' _and_ to the underlying directory.'
-                        print >>sys.stderr, \
-                            'Make sure Eclectus has write access ' \
-                                + 'to the database %s' \
-                                    % dbBuild.db.databaseUrl \
-                                + appendMsg
-                    except Exception:
-                        pass
-                sys.exit(1)
-        elif classObject == build.DatabaseBuilder and method == 'optimize':
+        if classObject == build.DatabaseBuilder and method == 'optimize':
             print >>sys.stderr, stacktrace
             QApplication.restoreOverrideCursor()
 
@@ -371,7 +300,7 @@ class UpdateWidget(QWidget, UpdateUI.Ui_Form):
             if relatedKey in EclectusCommandLineBuilder.BUILD_GROUPS:
                 tables.extend(
                     EclectusCommandLineBuilder.BUILD_GROUPS[relatedKey])
-
+            # TODO UpdateVersion might be installed later
             # TODO if for the first time a new language is installed check if
             #  tables in BUILD_GROUPS (zh-cmn, ja) need to be installed
 
@@ -485,7 +414,7 @@ class UpdateWidget(QWidget, UpdateUI.Ui_Form):
             if currentVersion and currentVersion > datetime.min:
                 self.statusLabel.setText(i18n('Local version is from %1',
                     str(currentVersion)))
-            elif currentVersion == None:
+            elif currentVersion is None:
                 self.statusLabel.setText(i18n('Not installed'))
             else:
                 self.statusLabel.setText(
@@ -515,11 +444,16 @@ class UpdateWidget(QWidget, UpdateUI.Ui_Form):
         if classObject == characterinfo.CharacterInfo \
             and method == 'getDictionaryVersions':
             self.setDictionaryVersions(content.copy())
-        elif classObject == build.DatabaseBuilder \
-            and method == 'build':
+
+        elif classObject == build.DatabaseBuilder and method == 'build':
+            # reload as content may change due to different database content
+            self._reloadObjects()
+
             self.installFinished(True)
-        elif classObject == build.DatabaseBuilder \
-            and method == 'remove':
+        elif classObject == build.DatabaseBuilder and method == 'remove':
+            # reload as content may change due to different database content
+            self._reloadObjects()
+
             # update menu
             self.removeFinished(True)
 
@@ -531,6 +465,17 @@ class UpdateWidget(QWidget, UpdateUI.Ui_Form):
         elif classObject == build.DatabaseBuilder \
             and method == 'remove':
             self.removeFinished(False)
+
+    def _reloadObjects(self):
+        self.renderThread.reloadObject(characterinfo.CharacterInfo)
+
+        charInfo = self.renderThread.getObjectInstance(
+            characterinfo.CharacterInfo)
+        htmlView = self.renderThread.getObjectInstance(
+            htmlview.HtmlView)
+        htmlViewSettings = htmlView.settings()
+        self.renderThread.setCachedObject(htmlview.HtmlView, charInfo,
+            **htmlViewSettings)
 
 
 class DictionaryDownloader:

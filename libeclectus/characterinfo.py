@@ -35,7 +35,7 @@ from sqlalchemy.sql import text, func
 import cjklib
 from cjklib.dbconnector import DatabaseConnector
 from cjklib import characterlookup
-from cjklib import reading
+from cjklib.reading import ReadingFactory
 from cjklib import exception
 from cjklib.util import cross
 
@@ -151,18 +151,23 @@ class CharacterInfo:
         }
     """Groups of similar sounding syllable finals."""
 
-    def __init__(self, language=None, readingN=None, dictionary=None,
-        characterDomain=None):
+    def __init__(self, language=None, reading=None, dictionary=None,
+        characterDomain=None, databaseUrl=None):
         """
         Initialises the CharacterInfo object.
-
-        @type locale: character
-        @param locale: I{character locale} (one out of TCJKV)
         """
-        databaseUrl = util.getDatabaseUrl()
-        configuration = None
+        configuration = {}
         if databaseUrl:
-            configuration = {'url': databaseUrl}
+            configuration['sqlalchemy.url'] = databaseUrl
+            if databaseUrl.startswith('sqlite://'):
+                configuration['attach'] = ([util.getDatabaseUrl()]
+                    + util.getAttachableDatabases())
+        else:
+            configuration['sqlalchemy.url'] = util.getDatabaseUrl()
+            configuration['attach'] = util.getAttachableDatabases()
+        #configuration['sqlalchemy.echo'] = True
+
+        self.databaseUrl = configuration['sqlalchemy.url']
         self.db = DatabaseConnector.getDBConnector(configuration)
 
         self.availableDictionaries = None
@@ -189,8 +194,10 @@ class CharacterInfo:
 
         self.locale = self.LANGUAGE_CHAR_LOCALE_MAPPING[self.language]
 
-        self.characterLookup = characterlookup.CharacterLookup(self.locale)
-        self.characterLookupTraditional = characterlookup.CharacterLookup('T')
+        self.characterLookup = characterlookup.CharacterLookup(self.locale,
+            dbConnectInst=self.db)
+        self.characterLookupTraditional = characterlookup.CharacterLookup('T',
+            dbConnectInst=self.db)
 
         # character domain
         if characterDomain and characterDomain \
@@ -201,7 +208,7 @@ class CharacterInfo:
         self.characterLookup.setCharacterDomain(self.characterDomain)
         self.characterLookupTraditional.setCharacterDomain(self.characterDomain)
 
-        self.readingFactory = reading.ReadingFactory()
+        self.readingFactory = ReadingFactory(dbConnectInst=self.db)
 
         # get incompatible reading conversions
         self.incompatibleConversions = {}
@@ -226,8 +233,8 @@ class CharacterInfo:
                 = self.DICTIONARY_INFO[self.dictionary]
 
             compatible = self.getCompatibleReadings(self.language)
-            if readingN and readingN in compatible:
-                self.reading = readingN
+            if reading and reading in compatible:
+                self.reading = reading
             else:
                 if self.language in self.LANGUAGE_DEFAULT_READING \
                     and self.LANGUAGE_DEFAULT_READING[self.language] \
@@ -243,8 +250,7 @@ class CharacterInfo:
 
         if self.dictionary:
             # check for FTS3 table (only SQLite)
-            self.dictionaryHasFTS3 = self.db.engine.has_table(
-                self.dictionary + '_Text')
+            self.dictionaryHasFTS3 = self.db.hasTable(self.dictionary + '_Text')
 
             dictType, _, _, _, _, _ = self.DICTIONARY_INFO[self.dictionary]
             if dictType == 'EDICT':
@@ -265,8 +271,7 @@ class CharacterInfo:
                 tableName = self.dictionary + '_Normal'
             else:
                 tableName = self.dictionary
-            self.dictionaryTable = Table(self.dictionary, self.db.metadata,
-                autoload=True, useexisting=True)
+            self.dictionaryTable = self.db.tables[self.dictionary]
             self.dictionaryPrefer = 'Weight' in self.dictionaryTable.columns
 
         self.minimalCharacterComponents = None
@@ -324,7 +329,7 @@ class CharacterInfo:
         if self.availableDictionaries == None:
             self.availableDictionaries = []
             for dictName in self.DICTIONARY_INFO:
-                if self.db.engine.has_table(dictName):
+                if self.db.hasTable(dictName):
                     self.availableDictionaries.append(dictName)
         return self.availableDictionaries
 
@@ -386,7 +391,7 @@ class CharacterInfo:
         return self.characterLookup.getAvailableCharacterDomains()
 
     def getUpdateVersions(self, tableNames):
-        if tableNames and self.db.engine.has_table('UpdateVersion'):
+        if tableNames and self.db.hasTable('UpdateVersion'):
             table = self.db.tables['UpdateVersion']
             versionDict = dict([(tableName, datetime.min) \
                 for tableName in tableNames])
@@ -1028,7 +1033,7 @@ class CharacterInfo:
 
     def getCharacterIndex(self, char, indexTable):
         """Returns a distinct index for a character using the given table."""
-        if self.db.engine.has_table(indexTable):
+        if self.db.hasTable(indexTable):
             table = self.db.tables[indexTable]
             return self.db.selectScalar(select(
                     [table.c.CharValue], table.c.ChineseCharacter == char))
@@ -1396,7 +1401,7 @@ class CharacterInfo:
                     _, _, _, cjkLang, _, _ = self.DICTIONARY_INFO[\
                         self.dictionary]
                     tableName = 'RadicalNames_' + cjkLang.replace('-', '_')
-                    if self.db.engine.has_table(tableName):
+                    if self.db.hasTable(tableName):
                         self.radicalNameTableName = tableName
                     else:
                         self.radicalNameTableName = ''
@@ -1467,7 +1472,7 @@ class CharacterInfo:
                     = self.DICTIONARY_INFO[self.dictionary]
                 tableName = 'RadicalTable_' + cjkLang.replace('-', '_') \
                     + '__' + targetLang.replace('-', '_')
-                if self.db.engine.has_table(tableName):
+                if self.db.hasTable(tableName):
                     radicalTableName = tableName
 
             if not radicalTableName:
@@ -1525,7 +1530,7 @@ class CharacterInfo:
             return None
 
         pronunciationTableName = self.pronunciationLookup[readingN]
-        if not self.db.engine.has_table(pronunciationTableName):
+        if not self.db.hasTable(pronunciationTableName):
             return None
 
         pronunciationTableReading, pronunciationTableOpt \

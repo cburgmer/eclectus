@@ -22,6 +22,8 @@ import gettext
 import base64
 import os.path
 
+from cjklib.util import getSearchPaths
+
 # file paths
 
 FILE_PATHS = {'default': [u'/usr/local/share/eclectus',
@@ -213,15 +215,30 @@ def getCJKScriptClass(char):
 
 def getDatabaseUrl():
     try:
-        from cjklib.util import getConfigSettings
-        configuration = getConfigSettings('Connection')
-        return configuration['url']
-    except KeyError:
-        print "Cannot find parameter 'url' in config file of cjklib."
-        print "Please check /etc/cjklib.conf or ~/.cjklib.conf"
-    # TODO use own database once build support for several databases is given
-    #base = os.path.dirname(os.path.abspath(__file__))
-    #databaseFile = os.path.join(base, "libeclectus.db")
-    #if not os.path.exists(databaseFile):
-        #databaseFile = "/var/lib/libeclectus/libeclectus.db"
-    #return 'sqlite:///%s' % databaseFile
+        from pkg_resources import Requirement, resource_filename
+        dbFile = resource_filename(Requirement.parse('eclectus'),
+            '%(proj)s/%(proj)s.db' % {'proj': 'libeclectus'})
+    except ImportError:
+        # fall back to the directory of this file
+        libdir = os.path.dirname(os.path.abspath(__file__))
+        dbFile = os.path.join(libdir,
+            '%(proj)s.db' % {'proj': 'libeclectus'})
+
+    return 'sqlite:///%s' % dbFile
+
+def getAttachableDatabases():
+    global FILE_PATHS
+
+    paths = []
+    #paths = getSearchPaths('eclectus')
+
+    ## include preset file paths
+    #for key in sorted(FILE_PATHS.keys()):
+        #for path in FILE_PATHS[key]:
+            #if path not in paths:
+                #paths.append(path)
+
+    # add cjklib default paths
+    paths.append('cjklib')
+
+    return paths

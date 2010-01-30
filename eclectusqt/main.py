@@ -60,8 +60,7 @@ except ImportError:
     sys.exit(1)
 
 
-from eclectusqt import update           # load first so we throw out warning if
-                                        #   cjklib is missing
+from eclectusqt import update
 from eclectusqt import dictionarypage
 from eclectusqt import radicalpage
 from eclectusqt import componentpage
@@ -143,15 +142,18 @@ class MainWindow(KXmlGuiWindow):
 
         dictionaryData = {}
         for field in ['Language', 'Transcription', 'Dictionary',
-            'Character Domain']:
-            value = DictionaryConfig.readEntry(field)
-            if value:
-                value = unicode(value)
-            dictionaryData[field] = value
+            'Character Domain', 'Update database url']:
+            dictionaryData[field] = util.readConfigString(DictionaryConfig,
+                field)
+
+        if not dictionaryData['Update database url']:
+            dictionaryData['Update database url'] = ('sqlite:///'
+                + util.getLocalData('dictionaries.db'))
 
         self.renderThread.setCachedObject(characterinfo.CharacterInfo,
             dictionaryData['Language'], dictionaryData['Transcription'],
-            dictionaryData['Dictionary'], dictionaryData['Character Domain'])
+            dictionaryData['Dictionary'], dictionaryData['Character Domain'],
+            dictionaryData['Update database url'])
         charInfo = self.renderThread.getObjectInstance(
             characterinfo.CharacterInfo)
         # set htmlview object and give proper locale
@@ -186,23 +188,13 @@ class MainWindow(KXmlGuiWindow):
 
         self.restoreWindowState()
 
-        if self.updateDialog.databaseHasBase():
-            self.finishInit()
-        else:
-            self.connect(self.updateDialog, SIGNAL("baseTablesInstalled"),
-                self.finishInit)
-
-            print >>sys.stderr, i18n("Basic tables missing, will install...")
-            self.updateDialog.installBase()
-
-    def finishInit(self):
         self.setCentralWidget(self.splitterFrame)
         self.splitterFrame.setVisible(True)
 
         self.initialised = True
 
-        if GeneralConfig.readEntry("Show installer on startup", 'True') \
-            == 'True':
+        if (GeneralConfig.readEntry("Show installer on startup", 'True')
+            == 'True'):
             self.updateAction.trigger()
 
     def setupUi(self):
@@ -639,10 +631,18 @@ class MainWindow(KXmlGuiWindow):
         currentIndex = charDomains.index(charInfo.characterDomain)
         self.charDomainChooserAction.setCurrentItem(currentIndex)
 
-    def _reloadObjects(self, language, reading, dictionary, charDomain):
+    def _reloadObjects(self, **kwargs):
         """Reload objects hold by render thread."""
-        self.renderThread.setCachedObject(characterinfo.CharacterInfo, language,
-            reading, dictionary, charDomain)
+        charInfo = self.renderThread.getObjectInstance(
+            characterinfo.CharacterInfo)
+
+        options = {}
+        for option in ('language', 'reading', 'dictionary', 'characterDomain',
+            'dictionary', 'databaseUrl'):
+            options[option] = kwargs.get(option, getattr(charInfo, option))
+
+        self.renderThread.setCachedObject(characterinfo.CharacterInfo,
+            **options)
 
         charInfo = self.renderThread.getObjectInstance(
             characterinfo.CharacterInfo)
@@ -652,7 +652,7 @@ class MainWindow(KXmlGuiWindow):
         self.renderThread.setCachedObject(htmlview.HtmlView, charInfo,
             **htmlViewSettings)
 
-        return charInfo.language, charInfo.reading, charInfo.dictionary
+        return charInfo
 
     def dictionaryChanged(self, index):
         _, language, dictionary = self.dictionaryList[index]
@@ -662,14 +662,11 @@ class MainWindow(KXmlGuiWindow):
         else:
             reading = None
 
-        charInfo = self.renderThread.getObjectInstance(
-            characterinfo.CharacterInfo)
-        charDomain = charInfo.characterDomain
-        _, reading, _ = self._reloadObjects(language, reading, dictionary,
-            charDomain)
+        charInfo = self._reloadObjects(language=language, reading=reading,
+            dictionary=dictionary)
 
-        if reading:
-            self.LAST_READING[(language, dictionary)] = reading
+        if charInfo.reading:
+            self.LAST_READING[(language, dictionary)] = charInfo.reading
 
     def transcriptionChanged(self, transcription):
         charInfo = self.renderThread.getObjectInstance(
@@ -678,23 +675,13 @@ class MainWindow(KXmlGuiWindow):
         if reading == charInfo.reading:
             return
 
-        language = charInfo.language
-        dictionary = charInfo.dictionary
-        charDomain = charInfo.characterDomain
-        _, reading, _ = self._reloadObjects(language, reading, dictionary,
-            charDomain)
+        charInfo = self._reloadObjects(reading=reading)
 
-        self.LAST_READING[(language, dictionary)] = reading
+        self.LAST_READING[(language, dictionary)] = charInfo.reading
 
     def charDomainChanged(self, charDomainIdx):
-        charInfo = self.renderThread.getObjectInstance(
-            characterinfo.CharacterInfo)
-
-        language = charInfo.language
-        reading = charInfo.reading
-        dictionary = charInfo.dictionary
-        charDomain, _ = self.CHARACTER_DOMAINS[charDomainIdx]
-        self._reloadObjects(language, reading, dictionary, charDomain)
+        charInfo = self._reloadObjects(
+            characterDomain=self.CHARACTER_DOMAINS[charDomainIdx])
 
     def slotCharacterComboActivated(self, inputString):
         self.characterCombo.addToHistory(inputString)
