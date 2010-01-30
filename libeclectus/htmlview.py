@@ -28,13 +28,13 @@ from libeclectus import util
 gettext = ngettext = None
 
 class HtmlView:
-
     WEB_LINKS = {'all': ['getUnihanLink'],
-        'zh-cmn-Hant': ['getCEDICTLink', 'getHanDeDictLink', 'getDictCNLink'],
+        'zh-cmn-Hant': ['getCEDICTLink', 'getHanDeDictLink', 'getDictCNLink',
+            'getEduTwLink'],
         'zh-cmn-Hans': ['getCEDICTLink', 'getHanDeDictLink', 'getDictCNLink'],
         'ja': [],
         'ko': [],
-        'zh-yue': ['getCantoDictLink'],
+        'zh-yue': ['getCantoDictLink', 'getEduTwLink'],
         'ja': ['getWWWJDICLink'],
         }
     """Links to websites for a given character string."""
@@ -408,6 +408,15 @@ class HtmlView:
             link = u'http://www.unicode.org/cgi-bin/GetUnihanData.pl?' \
                 + u'codepoint=%s' % hex(ord(charString)).replace('0x', '')
             return link, gettext('Unicode Unihan database')
+
+    def getEduTwLink(self, charString):
+        if len(charString) == 1:
+            relLink = self.charInfo.getCharacterIndex(charString, 'EduTwIndex')
+            if relLink:
+                link = u'http://www.edu.tw/files/site_content/M0001/bishuen/' \
+                    + relLink
+                return link, (u'常用國字標準字體筆順手冊 (%s)'
+                    % gettext('edu.tw stroke order handbook'))
 
     def getWWWJDICLink(self, charString):
         link = u'http://www.csse.monash.edu.au/~jwb/cgi-bin/' \

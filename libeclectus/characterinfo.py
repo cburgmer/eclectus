@@ -1071,6 +1071,15 @@ class CharacterInfo:
             entryList.append((char, readingEntities[idx]))
         return entryList
 
+    #{
+
+    def getCharacterIndex(self, char, indexTable):
+        """Returns a distinct index for a character using the given table."""
+        if self.db.engine.has_table(indexTable):
+            table = self.db.tables[indexTable]
+            return self.db.selectScalar(select(
+                    [table.c.CharValue], table.c.ChineseCharacter == char))
+
     #{ Radical, Components
 
     def getCharactersForKangxiRadicalIndex(self, radicalIndex,

@@ -1175,6 +1175,16 @@ class ChineseLessonsComMandarinPronunciation(GlobbingPronunciationBuilder):
             pass
 
 
+class EduTwStrokeOrderIndexBuilder(builder.CSVFileLoader):
+    """
+    Builds an index for accessing stroke order images on edu.tw.
+    """
+    PROVIDES = 'EduTwIndex'
+
+    TABLE_CSV_FILE_MAPPING = 'edutw_strokeorderindex.csv'
+    TABLE_DECLARATION_FILE_MAPPING = 'edutw_strokeorderindex.sql'
+
+
 class EclectusCommandLineBuilder(cli.CommandLineBuilder):
     DESCRIPTION = """Builds the database for Eclectus.
 Example: \"%prog build allAvail\""""
