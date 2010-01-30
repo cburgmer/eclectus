@@ -147,7 +147,7 @@ class MainWindow(KXmlGuiWindow):
                 field)
 
         if not dictionaryData['Update database url']:
-            dictionaryData['Update database url'] = ('sqlite:///'
+            dictionaryData['Update database url'] = unicode('sqlite:///'
                 + util.getLocalData('dictionaries.db'))
 
         self.renderThread.setCachedObject(characterinfo.CharacterInfo,
