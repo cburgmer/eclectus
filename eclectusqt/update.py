@@ -313,6 +313,7 @@ class UpdateWidget(QWidget, UpdateUI.Ui_Form):
             self.setWorking(False)
 
     def removeDictionary(self):
+        # TODO only remove if available in main database
         self.statusLabel.setText(i18n('Removing dictionary...'))
         self.checkVersionButton.setEnabled(False)
         self.dictionaryCombo.setEnabled(False)
