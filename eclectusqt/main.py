@@ -680,8 +680,8 @@ class MainWindow(KXmlGuiWindow):
         self.LAST_READING[(language, dictionary)] = charInfo.reading
 
     def charDomainChanged(self, charDomainIdx):
-        charInfo = self._reloadObjects(
-            characterDomain=self.CHARACTER_DOMAINS[charDomainIdx])
+        charDomain, _ = self.CHARACTER_DOMAINS[charDomainIdx]
+        charInfo = self._reloadObjects(characterDomain=charDomain)
 
     def slotCharacterComboActivated(self, inputString):
         self.characterCombo.addToHistory(inputString)
