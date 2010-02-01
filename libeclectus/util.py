@@ -81,8 +81,9 @@ def locatePath(name):
         if os.path.exists(path):
             return path
     else:
+        # get from local version
         modulePath = os.path.dirname(os.path.abspath(__file__))
-        localPath = os.path.join(modulePath, 'files', name)
+        localPath = os.path.join(modulePath, 'files', 'build', name)
         if os.path.exists(localPath):
             return localPath
 
@@ -229,14 +230,13 @@ def getDatabaseUrl():
 def getAttachableDatabases():
     global FILE_PATHS
 
-    paths = []
-    #paths = getSearchPaths('eclectus')
+    paths = getSearchPaths('eclectus')
 
-    ## include preset file paths
-    #for key in sorted(FILE_PATHS.keys()):
-        #for path in FILE_PATHS[key]:
-            #if path not in paths:
-                #paths.append(path)
+    # include preset file paths
+    for key in sorted(FILE_PATHS.keys()):
+        for path in FILE_PATHS[key]:
+            if path not in paths:
+                paths.append(path)
 
     # add cjklib default paths
     paths.append('cjklib')
