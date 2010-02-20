@@ -7,6 +7,73 @@ Merge to lists of similar characters.
 import sys
 import codecs
 import csv
+from collections import MutableMapping
+
+class OrderedDict(dict, MutableMapping):
+
+    # Methods with direct access to underlying attributes
+
+    def __init__(self, *args, **kwds):
+        if len(args) > 1:
+            raise TypeError('expected at 1 argument, got %d', len(args))
+        if not hasattr(self, '_keys'):
+            self._keys = []
+        self.update(*args, **kwds)
+
+    def clear(self):
+        del self._keys[:]
+        dict.clear(self)
+
+    def __setitem__(self, key, value):
+        if key not in self:
+            self._keys.append(key)
+        dict.__setitem__(self, key, value)
+
+    def __delitem__(self, key):
+        dict.__delitem__(self, key)
+        self._keys.remove(key)
+
+    def __iter__(self):
+        return iter(self._keys)
+
+    def __reversed__(self):
+        return reversed(self._keys)
+
+    def popitem(self):
+        if not self:
+            raise KeyError
+        key = self._keys.pop()
+        value = dict.pop(self, key)
+        return key, value
+
+    def __reduce__(self):
+        items = [[k, self[k]] for k in self]
+        inst_dict = vars(self).copy()
+        inst_dict.pop('_keys', None)
+        return (self.__class__, (items,), inst_dict)
+
+    # Methods with indirect access via the above methods
+
+    setdefault = MutableMapping.setdefault
+    update = MutableMapping.update
+    pop = MutableMapping.pop
+    keys = MutableMapping.keys
+    values = MutableMapping.values
+    items = MutableMapping.items
+
+    def __repr__(self):
+        pairs = ', '.join(map('%r: %r'.__mod__, self.items()))
+        return '%s({%s})' % (self.__class__.__name__, pairs)
+
+    def copy(self):
+        return self.__class__(self)
+
+    @classmethod
+    def fromkeys(cls, iterable, value=None):
+        d = cls()
+        for key in iterable:
+            d[key] = value
+        return d
 
 class CSVFileLoader(object):
     def __init__(self, filePath):
@@ -16,7 +83,7 @@ class CSVFileLoader(object):
         fileHandle = codecs.open(self.filePath, 'r', 'utf-8')
         csvReader = self._getCSVReader(fileHandle)
         csvType = None
-        groups = {}
+        groups = OrderedDict()
 
         for line in csvReader:
             if not csvType:
@@ -125,8 +192,41 @@ class CSVFileLoader(object):
         return CSVFileLoader.unicode_csv_reader(content, self.fileDialect)
 
 
+def findSimilarGroup(originalGroup, newGroups, groupLookup=None):
+    # char to group mapping
+    if groupLookup is None:
+        groupLookup = {}
+        for groupIdx, group in enumerate(newGroups):
+            for char in group:
+                if char not in groupLookup:
+                    groupLookup[char] = []
+                groupLookup[char].append(groupIdx)
+
+    # possible matches
+    possibleSimilarGroups = []
+    for char in originalGroup:
+        possibleSimilarGroups.extend(groupLookup.get(char, []))
+
+    # best match
+    mostSimilar = None
+    mostSimilarShares = None
+    for groupIdx in possibleSimilarGroups:
+        if (not mostSimilarShares
+            or len(newGroups[groupIdx] & originalGroup)
+                > len(mostSimilarShares)):
+            mostSimilarShares = newGroups[groupIdx] & originalGroup
+            mostSimilar = groupIdx
+
+    return mostSimilar
+
+originalGroups = []
+
 collection = set()
-for fileName in sys.argv[1:]:
+for _, group in CSVFileLoader(sys.argv[1]).getGroups().items():
+    collection.add(frozenset(group))
+    originalGroups.append(frozenset(group))
+
+for fileName in sys.argv[2:]:
     for _, group in CSVFileLoader(fileName).getGroups().items():
         collection.add(frozenset(group))
 collection = list(collection)
@@ -162,7 +262,17 @@ charMultiGroups = [char for char in charGroupMap if len(charGroupMap[char]) > 1]
 if charMultiGroups:
     print "Chars in several groups:", ' '.join(charMultiGroups).encode('utf8')
 
+# first try to restore old order
+curIdx = 0
+for originalGroup in originalGroups:
+    newIdx = findSimilarGroup(originalGroup, newCollection)
+    if newIdx:
+        for char in sorted(newCollection[newIdx]):
+            print ('%d,"%s"' % (curIdx, char)).encode('utf8')
+        curIdx += 1
+        del newCollection[newIdx]
+
 newCollection.sort(cmp=lambda x,y: cmp(min(x), min(y)))
 for idx, charGroup in enumerate(newCollection):
     for char in sorted(charGroup):
-        print ('%d,"%s"' % (idx, char)).encode('utf8')
+        print ('%d,"%s"' % (curIdx+idx, char)).encode('utf8')
