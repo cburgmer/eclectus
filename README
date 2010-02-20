@@ -9,7 +9,6 @@ Features
   * works without a dictionary (though limited),
   * supported romanisations/character readings: Kana, Pinyin, Wade-Giles,
     Gwoyeu Romatzyh, IPA, Jyutping, Cantonese Yale, Hangul,
-  * modular support for adding further character readings,
   * fuzzy search (wildcards), mixing of characers and pronunciation,
   * integrated search for headword, pronunciation and translation at the
     same time,
@@ -44,7 +43,8 @@ Once downloaded/extracted Eclectus can be installed on the system by running:
 
 $ python setup.py install
 
-If you pulled from SVN make sure you create the base tables before the install:
+If you pulled from SVN/GIT make sure you create the base tables before the
+install:
 $ python -m libeclectus/buildtables build base \
     --database=sqlite:///libeclectus/libeclectus.db
 
@@ -69,5 +69,5 @@ $ make order.gif
 
 Contact
 -------
-If you are interested in the development to Eclectus, join
-eclectus-devel@googlegroups.com (http://groups.google.com/group/eclectus-devel).
+For help or discussions about Eclectus join eclectus-dict@googlegroups.com
+(http://groups.google.com/group/eclectus-dict).
