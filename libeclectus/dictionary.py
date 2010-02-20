@@ -8,16 +8,14 @@ import re
 
 from sqlalchemy.sql import and_, or_
 
-from cjklib.dictionary.search import (Exact, SimpleReading,
-    _TonelessReadingWildcardBase)
-from cjklib.dictionary import EDICT, CEDICT, CEDICTGR, HanDeDict, CFDICT
+from cjklib.dictionary import EDICT, CEDICT, CEDICTGR, HanDeDict, CFDICT, search
 from cjklib.reading import ReadingFactory
 from cjklib import exception
 from cjklib.util import cross
 
 from libeclectus import util
 
-class HeadwordEntity(Exact):
+class HeadwordEntity(search.Exact):
     """
     Exact search strategy class matching any single Chinese character from a
     headword.
@@ -132,7 +130,7 @@ class HeadwordEntityReading(HeadwordEntity):
         return lambda headword, reading: (headword, reading) in pairs
 
 
-class _SimilarReadingWildcardBase(_TonelessReadingWildcardBase):
+class _SimilarReadingWildcardBase(search._TonelessReadingWildcardBase):
     """
     Wildcard search base class for similar readings.
     """
@@ -238,7 +236,7 @@ class _SimilarReadingWildcardBase(_TonelessReadingWildcardBase):
         return self._wildcardForms
 
 
-class SimilarWildcardReading(SimpleReading, _SimilarReadingWildcardBase):
+class SimilarWildcardReading(search.SimpleReading, _SimilarReadingWildcardBase):
     """
     Reading based search strategy with support similar readings. For tonal
     readings other tonal combinations will be searched and if supported,
@@ -246,7 +244,7 @@ class SimilarWildcardReading(SimpleReading, _SimilarReadingWildcardBase):
     misunderstand forms.
     """
     def __init__(self, **options):
-        SimpleReading.__init__(self)
+        search.SimpleReading.__init__(self)
         _SimilarReadingWildcardBase.__init__(self, **options)
 
     def getWhereClause(self, column, searchStr, **options):
@@ -264,6 +262,114 @@ class SimilarWildcardReading(SimpleReading, _SimilarReadingWildcardBase):
         else:
             # exact matching, 6x quicker in Cpython for 'tian1an1men2'
             return self._getSimpleMatchFunction(searchStr, **options)
+
+
+class _MixedSimilarReadingWildcardBase(
+    search._MixedTonelessReadingWildcardBase, _SimilarReadingWildcardBase):
+
+    def _getWildcardForms(self, readingStr, **options):
+        def isReadingEntity(entity, cache={}):
+            if entity not in cache:
+                cache[entity] = self._readingFactory.isReadingEntity(entity,
+                    self._dictInstance.READING,
+                    **self._dictInstance.READING_OPTIONS)
+            return cache[entity]
+
+        if self._getWildcardFormsOptions != (readingStr, options):
+            self._getWildcardFormsOptions = (readingStr, options)
+
+            decompEntities = self._getPlainForms(readingStr, **options)
+
+            # separate reading entities from non-reading ones
+            self._wildcardForms = []
+            for entities in decompEntities:
+                searchEntities = []
+                hasReadingEntity = hasHeadwordEntity = False
+                for entity in entities:
+                    if not isinstance(entity, basestring):
+                        hasReadingEntity = True
+
+                        entity, plainEntity, _ = entity
+                        if plainEntity is not None:
+                            similar = self._getSimilarPlainEntities(plainEntity,
+                                self._dictInstance.READING)
+                            entities = [self._createTonelessReadingWildcard(e)
+                                    for e in similar]
+                            searchEntities.append(entities)
+                        else:
+                            #searchEntities.append(
+                                #self._createReadingWildcard(entity))
+                            searchEntities.append(
+                                [self._createReadingWildcard(entity)])
+                    elif self._supportWildcards:
+                        parsedEntities = self._parseWildcardString(entity)
+                        #searchEntities.extend(parsedEntities)
+                        searchEntities.extend([[s] for s in parsedEntities])
+                        hasHeadwordEntity = hasHeadwordEntity or any(
+                            isinstance(entity, self.HeadwordWildcard)
+                            for entity in parsedEntities)
+                    else:
+                        hasHeadwordEntity = True
+                        #searchEntities.extend(
+                            #[self._createHeadwordWildcard(c) for c in entity])
+                        searchEntities.extend(
+                            [[self._createHeadwordWildcard(c)] for c in entity])
+
+                #TODO Don't use cross product on similar reading instances
+                #   directly. Implement that on the SQL side, as to minimize
+                #   searches for the match function.
+                searchEntities = cross(*searchEntities)
+
+                # discard pure reading or pure headword strings as they will be
+                #   covered through other strategies
+                if hasReadingEntity and hasHeadwordEntity:
+                    #self._wildcardForms.append(searchEntities)
+                    self._wildcardForms.extend(searchEntities)
+
+        return self._wildcardForms
+
+
+class MixedSimilarWildcardReading(search.SimpleReading,
+    _MixedSimilarReadingWildcardBase):
+    """
+    Reading search strategy that supplements
+    L{SimilarWildcardReading} to allow intermixing of similar readings with
+    single characters from the headword. By default wildcard searches are
+    supported.
+
+    This strategy complements the basic search strategy. It is not built to
+    return results for plain reading or plain headword strings.
+    """
+    def __init__(self, supportWildcards=True):
+        search.SimpleReading.__init__(self)
+        _MixedSimilarReadingWildcardBase.__init__(self, supportWildcards)
+
+    def getWhereClause(self, headwordColumn, readingColumn, searchStr,
+        **options):
+        """
+        Returns a SQLAlchemy clause that is the necessary condition for a
+        possible match. This clause is used in the database query. Results may
+        then be further narrowed by L{getMatchFunction()}.
+
+        @type headwordColumn: SQLAlchemy column instance
+        @param headwordColumn: headword column to check against
+        @type readingColumn: SQLAlchemy column instance
+        @param readingColumn: reading column to check against
+        @type searchStr: str
+        @param searchStr: search string
+        @return: SQLAlchemy clause
+        """
+        queries = self._getWildcardQuery(searchStr, **options)
+        if queries:
+            return or_(*[
+                    and_(self._like(headwordColumn, headwordQuery),
+                        self._like(readingColumn, readingQuery))
+                    for headwordQuery, readingQuery in queries])
+        else:
+            return None
+
+    def getMatchFunction(self, searchStr, **options):
+        return self._getWildcardMatchFunction(searchStr, **options)
 
 
 class ExactMultiple(object):
@@ -305,8 +411,8 @@ class ExtendedDictionarySupport(object):
         - Get all entries for single entities of a headword entry
         - Get all entries for substrings of a headword
         - Search for similar pronunciations
-    TODO
         - Search for similar pronunciations mixed with headword
+    TODO
         - Get a random entry
 
     TODO
@@ -322,6 +428,7 @@ class ExtendedDictionarySupport(object):
             strategy instance
         @keyword headwordSubstringSearchStrategy: headword substring search
             strategy instance
+        # TODO to specific for EDICT
         """
         if 'headwordEntitiesSearchStrategy' in options:
             self.headwordEntitiesSearchStrategy \
@@ -352,9 +459,13 @@ class ExtendedDictionarySupport(object):
         if hasattr(self.readingSimilarSearchStrategy, 'setDictionaryInstance'):
             self.readingSimilarSearchStrategy.setDictionaryInstance(self)
 
-        self.mixedSimilarReadingSearchStrategy = options.get(
-            'mixedSimilarReadingSearchStrategy', None) # TODO set one by default
-        """Strategy for mixed searching of headword/similar reading."""
+        if 'mixedSimilarReadingSearchStrategy' in options:
+            self.mixedSimilarReadingSearchStrategy \
+                = options['mixedSimilarReadingSearchStrategy']
+        else:
+            self.mixedSimilarReadingSearchStrategy \
+                = MixedSimilarWildcardReading()
+            """Strategy for mixed searching of headword/similar reading."""
         if (self.mixedSimilarReadingSearchStrategy
             and hasattr(self.mixedSimilarReadingSearchStrategy,
                 'setDictionaryInstance')):
