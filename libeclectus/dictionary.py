@@ -8,7 +8,8 @@ import re
 
 from sqlalchemy.sql import and_, or_
 
-from cjklib.dictionary import ExactSearchStrategy, TonelessReadingSearchStrategy
+from cjklib.dictionary.search import (Exact, SimpleReading,
+    _TonelessReadingWildcardBase)
 from cjklib.dictionary import EDICT, CEDICT, CEDICTGR, HanDeDict, CFDICT
 from cjklib.reading import ReadingFactory
 from cjklib import exception
@@ -16,7 +17,7 @@ from cjklib.util import cross
 
 from libeclectus import util
 
-class HeadwordEntitySearchStrategy(ExactSearchStrategy):
+class HeadwordEntity(Exact):
     """
     Exact search strategy class matching any single Chinese character from a
     headword.
@@ -65,7 +66,7 @@ class HeadwordEntitySearchStrategy(ExactSearchStrategy):
         return lambda headword, reading: headword in characters
 
 
-class HeadwordEntityReadingSearchStrategy(HeadwordEntitySearchStrategy):
+class HeadwordEntityReading(HeadwordEntity):
     """
     Exact search strategy class matching any single Chinese character from a
     headword with the reading as found in the headword.
@@ -99,7 +100,7 @@ class HeadwordEntityReadingSearchStrategy(HeadwordEntitySearchStrategy):
                 raise exception.ConversionError(
                     "Decomposition failed for '%s'." % readingStr)
 
-            entities = [entity for entity in entities if entity != ' ']
+            entities = [entity for entity in convertedEntities if entity != ' ']
 
             if len(entities) != len(headwordStr):
                 raise exception.ConversionError(
@@ -121,8 +122,7 @@ class HeadwordEntityReadingSearchStrategy(HeadwordEntitySearchStrategy):
         readingStr, **options):
         pairs = self._getCharacters(headwordStr, readingStr, **options)
         # quick search, will be filtered later
-        chars = [char for char, _ in pairs]
-        readingEntities = [entity for _, entity in pairs]
+        chars, readingEntities = zip(*pairs)
 
         return and_(headwordColumn.in_(chars),
             readingColumn.in_(readingEntities))
@@ -132,12 +132,9 @@ class HeadwordEntityReadingSearchStrategy(HeadwordEntitySearchStrategy):
         return lambda headword, reading: (headword, reading) in pairs
 
 
-class SimilarReadingSearchStrategy(TonelessReadingSearchStrategy):
+class _SimilarReadingWildcardBase(_TonelessReadingWildcardBase):
     """
-    Reading based search strategy with support similar readings. For tonal
-    readings other tonal combinations will be searched and if supported,
-    syllable initials and finals will be exchanged with ambiguous or easy to
-    misunderstand forms.
+    Wildcard search base class for similar readings.
     """
     AMBIGUOUS_INITIALS = {'Pinyin': {
             'alveolar/retroflex': [('z', 'zh'), ('c', 'ch'), ('s', 'sh')],
@@ -171,97 +168,105 @@ class SimilarReadingSearchStrategy(TonelessReadingSearchStrategy):
         }
     """Groups of similar sounding syllable finals."""
 
-    def __init__(self):
-        TonelessReadingSearchStrategy.__init__(self)
-        self._getSimilarReadingsOptions = None
+    @classmethod
+    def _getSimilarPlainEntities(cls, plainEntity, reading):
+        # TODO the following is not independent of reading and really slow
+        similar = [plainEntity]
+        if reading in cls.AMBIGUOUS_INITIALS:
+            for key in cls.AMBIGUOUS_INITIALS[reading]:
+                for tpl in cls.AMBIGUOUS_INITIALS[reading][key]:
+                    a, b = tpl
+                    if re.match(a + u'[aeiouü]', plainEntity):
+                        similar.append(b + plainEntity[len(a):])
+                    elif re.match(b + u'[aeiouü]', plainEntity):
+                        similar.append(a + plainEntity[len(b):])
+        # for all initial derived forms change final
+        if reading in cls.AMBIGUOUS_FINALS:
+            for modEntity in similar[:]:
+                for key in cls.AMBIGUOUS_FINALS[reading]:
+                    for tpl in cls.AMBIGUOUS_FINALS[reading][key]:
+                        a, b = tpl
+                        if re.search(u'[^aeiouü]' + a + '$',
+                            modEntity):
+                            similar.append(modEntity[:-len(a)] + b)
+                        elif re.search(u'[^aeiouü]' + b + '$',
+                            modEntity):
+                            similar.append(modEntity[:-len(b)] + a)
+        return similar
 
-    def _getPlainForms(self, searchStr, **options):
-        def isPlainReadingEntity(entity, cache={}):
-            if entity not in cache:
-                cache[entity] = self._readingFactory.isPlainReadingEntity(
-                    entity, self._dictInstance.READING,
-                    **self._dictInstance.READING_OPTIONS)
-            return cache[entity]
+    def _getWildcardForms(self, searchStr, **options):
+        if self._getWildcardFormsOptions != (searchStr, options):
+            decompEntities = self._getPlainForms(searchStr, **options)
 
-        def getPlainEntity(entity, cache={}):
-            if entity not in cache:
-                try:
-                    cache[entity], _ = self._readingFactory.splitEntityTone(
-                        entity, self._dictInstance.READING,
-                        **self._dictInstance.READING_OPTIONS)
-                except (exception.InvalidEntityError,
-                    exception.UnsupportedError):
-                    cache[entity] = None
-            return cache[entity]
+            self._wildcardForms = []
+            for entities in decompEntities:
+                wildcardEntities = []
+                for entity in entities:
+                    if not isinstance(entity, basestring):
+                        entity, plainEntity, _ = entity
+                        if plainEntity is not None:
+                            similar = self._getSimilarPlainEntities(plainEntity,
+                                self._dictInstance.READING)
+                            entities = [self._createTonalEntityWildcard(e)
+                                    for e in similar]
+                            wildcardEntities.append(entities)
+                        else:
+                            #wildcardEntities.append(entity)
+                            wildcardEntities.append([entity])
+                    elif self._supportWildcards:
+                        #wildcardEntities.extend(
+                            #self._parseWildcardString(entity))
+                        wildcardEntities.extend([[s] for s in 
+                            self._parseWildcardString(entity)])
+                    else:
+                        searchEntities.extend([[s] for s in list(entity)])
 
-        if self._getSimilarReadingsOptions != (searchStr, options):
-
-            decompositionEntities \
-                = TonelessReadingSearchStrategy._getPlainForms(self, searchStr,
-                    **options)
-            # TODO Optimize for Pinyin to remove decompositions with single 'n'
-            #   or 'ng'
-
-            isTonal = (self._readingFactory.isReadingOperationSupported(
-                    'isPlainReadingEntity', self._dictInstance.READING)
-                and self._readingFactory.isReadingOperationSupported(
-                    'splitEntityTone', self._dictInstance.READING))
-
-            self._similarDecompositions = []
-            for decomposition in decompositionEntities:
-
-                similarEntities = []
-                for entity in decomposition:
-                    if isinstance(entity, basestring):
-                            similarEntities.append([entity])
-                            continue
-
-                    _, plainEntity, _ = entity
-
-                    # TODO the following is not independent of reading and really slow
-                    similar = [plainEntity]
-                    if self._dictInstance.READING in self.AMBIGUOUS_INITIALS:
-                        for key in self.AMBIGUOUS_INITIALS[
-                            self._dictInstance.READING]:
-                            for tpl in self.AMBIGUOUS_INITIALS[
-                                self._dictInstance.READING][key]:
-                                a, b = tpl
-                                if re.match(a + u'[aeiouü]', plainEntity):
-                                    similar.append(b + plainEntity[len(a):])
-                                elif re.match(b + u'[aeiouü]', plainEntity):
-                                    similar.append(a + plainEntity[len(b):])
-                    # for all initial derived forms change final
-                    if self._dictInstance.READING in self.AMBIGUOUS_FINALS:
-                        for modEntity in similar[:]:
-                            for key in self.AMBIGUOUS_FINALS[
-                                self._dictInstance.READING]:
-                                for tpl in self.AMBIGUOUS_FINALS[
-                                    self._dictInstance.READING][key]:
-                                    a, b = tpl
-                                    if re.search(u'[^aeiouü]' + a + '$',
-                                        modEntity):
-                                        similar.append(modEntity[:-len(a)] + b)
-                                    elif re.search(u'[^aeiouü]' + b + '$',
-                                        modEntity):
-                                        similar.append(modEntity[:-len(b)] + a)
-
-                    # append as plain entity, no tone as we search for all
-                    similarEntities.append([(None, s, None) for s in similar])
-
-                similarEntityList = cross(*similarEntities)
+                #TODO Don't use cross product on similar reading instances
+                #   directly. Implement that on the SQL side, as to minimize
+                #   searches for the match function.
+                wildcardEntities = cross(*wildcardEntities)
 
                 # remove exact hits
                 # TODO needs filtering later, too, then document feature
                 if (options.get('noExact', False)
-                    and entities in similarEntityList):
-                    similarEntityList.remove(entities)
+                    and entities in wildcardEntities):
+                    wildcardEntities.remove(entities)
 
-                self._similarDecompositions.extend(similarEntityList)
+                #self._wildcardForms.append(wildcardEntities)
+                self._wildcardForms.extend(wildcardEntities)
 
-        return self._similarDecompositions
+        return self._wildcardForms
 
 
-class ExactMultipleSearchStrategy(object):
+class SimilarWildcardReading(SimpleReading, _SimilarReadingWildcardBase):
+    """
+    Reading based search strategy with support similar readings. For tonal
+    readings other tonal combinations will be searched and if supported,
+    syllable initials and finals will be exchanged with ambiguous or easy to
+    misunderstand forms.
+    """
+    def __init__(self, **options):
+        SimpleReading.__init__(self)
+        _SimilarReadingWildcardBase.__init__(self, **options)
+
+    def getWhereClause(self, column, searchStr, **options):
+        if self._hasWildcardForms(searchStr, **options):
+            queries = self._getWildcardQuery(searchStr, **options)
+            return or_(*[self._like(column, query) for query in queries])
+        else:
+            # exact lookup
+            queries = self._getSimpleQuery(searchStr, **options)
+            return or_(*[self._equals(column, query) for query in queries])
+
+    def getMatchFunction(self, searchStr, **options):
+        if self._hasWildcardForms(searchStr, **options):
+            return self._getWildcardMatchFunction(searchStr, **options)
+        else:
+            # exact matching, 6x quicker in Cpython for 'tian1an1men2'
+            return self._getSimpleMatchFunction(searchStr, **options)
+
+
+class ExactMultiple(object):
     """Exact search strategy class matching any strings from a list."""
     def getWhereClause(self, column, searchStrings):
         """
@@ -305,6 +310,7 @@ class ExtendedDictionarySupport(object):
         - Get a random entry
 
     TODO
+        - Use * and ? as wildcards
         - Unify entries with same headword
         - Split entries with different translation fields
     """
@@ -321,8 +327,7 @@ class ExtendedDictionarySupport(object):
             self.headwordEntitiesSearchStrategy \
                 = options['headwordEntitiesSearchStrategy']
         else:
-            self.headwordEntitiesSearchStrategy \
-                = HeadwordEntitySearchStrategy()
+            self.headwordEntitiesSearchStrategy = HeadwordEntity()
             """Strategy for searching single headword entities."""
         if hasattr(self.headwordEntitiesSearchStrategy,
             'setDictionaryInstance'):
@@ -332,8 +337,7 @@ class ExtendedDictionarySupport(object):
             self.headwordSubstringSearchStrategy \
                 = options['headwordSubstringSearchStrategy']
         else:
-            self.headwordSubstringSearchStrategy \
-                = ExactMultipleSearchStrategy()
+            self.headwordSubstringSearchStrategy = ExactMultiple()
             """Strategy for searching headword substrings."""
         if hasattr(self.headwordSubstringSearchStrategy,
             'setDictionaryInstance'):
@@ -343,7 +347,7 @@ class ExtendedDictionarySupport(object):
             self.readingSimilarSearchStrategy \
                 = options['readingSimilarSearchStrategy']
         else:
-            self.readingSimilarSearchStrategy = SimilarReadingSearchStrategy()
+            self.readingSimilarSearchStrategy = SimilarWildcardReading()
             """Strategy for searching similar readings."""
         if hasattr(self.readingSimilarSearchStrategy, 'setDictionaryInstance'):
             self.readingSimilarSearchStrategy.setDictionaryInstance(self)
@@ -542,8 +546,7 @@ class ExtendedCEDICTStyleSupport(ExtendedDictionarySupport):
 class ExtendedCEDICT(CEDICT, ExtendedCEDICTStyleSupport):
     def __init__(self, **options):
         if 'headwordEntitiesSearchStrategy' not in options:
-            options['headwordEntitiesSearchStrategy'] \
-                = HeadwordEntityReadingSearchStrategy()
+            options['headwordEntitiesSearchStrategy'] = HeadwordEntityReading()
         CEDICT.__init__(self, **options)
         ExtendedCEDICTStyleSupport.__init__(self, **options)
 
