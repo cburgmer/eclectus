@@ -3,19 +3,140 @@
 """
 High level dictionary access.
 """
+__all__ = [
+    # access methods
+    "getDictionaryClasses", "getDictionaryClass", "getDictionary",
+    # dictionaries
+    "ExtendedEDICT", "ExtendedCEDICTGR", "ExtendedCEDICT", "ExtendedHanDeDict",
+    "ExtendedCFDICT"]
 
 import re
 import random
+import types
 
 from sqlalchemy import select
 from sqlalchemy.sql import and_, or_, func
 
-from cjklib.dictionary import EDICT, CEDICT, CEDICTGR, HanDeDict, CFDICT, search
+from cjklib.dictionary import EDICT, CEDICT, CEDICTGR, HanDeDict, CFDICT
+from cjklib.dictionary import search, entry
 from cjklib.reading import ReadingFactory
+from cjklib.characterlookup import CharacterLookup
 from cjklib import exception
 from cjklib.util import cross
 
 from libeclectus import util
+
+def getDictionaryClasses():
+    """
+    Gets all classes in module that implement L{BaseDictionary}.
+
+    @rtype: set
+    @return: list of all classes inheriting form L{BaseDictionary}
+    """
+    dictionaryModule = __import__("libeclectus.dictionary")
+    # get all classes that inherit from BaseDictionary
+    return set([clss \
+        for clss in dictionaryModule.dictionary.__dict__.values() \
+        if type(clss) == types.TypeType \
+        and issubclass(clss, ExtendedDictionarySupport) \
+        and hasattr(clss, 'PROVIDES') and clss.PROVIDES])
+
+_dictionaryMap = None
+def getDictionaryClass(dictionaryName):
+    """
+    Get a dictionary class by dictionary name.
+
+    @type dictionaryName: str
+    @param dictionaryName: dictionary name
+    @rtype: type
+    @return: dictionary class
+    """
+    global _dictionaryMap
+    if _dictionaryMap is None:
+        _dictionaryMap = dict([(dictCls.PROVIDES, dictCls)
+            for dictCls in getDictionaryClasses()])
+
+    if dictionaryName not in _dictionaryMap:
+        raise ValueError('Not a supported dictionary')
+    return _dictionaryMap[dictionaryName]
+
+def getDictionary(dictionaryName, **options):
+    """
+    Get a dictionary instance by dictionary name.
+
+    @type dictionaryName: str
+    @param dictionaryName: dictionary name
+    @rtype: type
+    @return: dictionary instance
+    """
+    dictCls = getDictionaryClass(dictionaryName)
+    return dictCls(**options)
+
+
+class HeadwordAlternative(entry.UnifiedHeadword):
+    """
+    Factory adding a simple X{Headword} key for CEDICT style dictionaries to
+    provide results compatible with EDICT. An alternative headword is given as
+    key 'HeadwordAlternative'.
+    """
+    def _unifyHeadwords(self, entry):
+        entry = list(entry)
+        if self.headword == 's':
+            headwords = (entry[0], entry[1])
+        else:
+            headwords = (entry[1], entry[0])
+
+        if headwords[0] == headwords[1]:
+            entry.extend((headwords[0], None))
+        else:
+            entry.extend(headwords)
+        return entry
+
+    def setDictionaryInstance(self, dictInstance):
+        entry.NamedTuple.setDictionaryInstance(self, dictInstance)
+        if not hasattr(dictInstance, 'COLUMNS'):
+            raise ValueError('Incompatible dictionary')
+
+        self.columnNames = (dictInstance.COLUMNS
+            + ['Headword', 'HeadwordAlternative'])
+
+
+class EDICTEntry(entry.UnifiedHeadword):
+    """
+    Factory adding a simple X{Headword} key for CEDICT style dictionaries to
+    provide results compatible with EDICT. An alternative headword is given as
+    key 'HeadwordAlternative'.
+    """
+    def _unifyHeadwords(self, entry):
+        entry = list(entry)
+        entry.insert(1, entry[0])
+        return entry
+
+    def setDictionaryInstance(self, dictInstance):
+        entry.NamedTuple.setDictionaryInstance(self, dictInstance)
+        if not hasattr(dictInstance, 'COLUMNS'):
+            raise ValueError('Incompatible dictionary')
+
+        self.columnNames = ['Headword', 'HeadwordAlternative', 'Reading',
+            'Translation']
+
+
+class CEDICTEntry(EDICTEntry):
+    """
+    Factory adding a simple X{Headword} key for CEDICT style dictionaries to
+    provide results compatible with EDICT. An alternative headword is given as
+    key 'HeadwordAlternative'.
+    """
+    def _unifyHeadwords(self, entry):
+        entry = list(entry)
+        if self.headword == 's':
+            headwords = (entry[0], entry[1])
+        else:
+            headwords = (entry[1], entry[0])
+
+        entry[0:2] = headwords
+        return entry
+
 
 class HeadwordEntity(search.Exact):
     """
@@ -392,6 +513,55 @@ class ExactMultiple(search.Exact):
         return lambda cell: cell in searchStrings
 
 
+class HeadwordVariant(search.Exact):
+    """Search strategy class matching variants of a given headword."""
+    def setDictionaryInstance(self, dictInstance):
+        search.Exact.setDictionaryInstance(self, dictInstance)
+        self._characterLookup = CharacterLookup('T',
+            dbConnectInst=dictInstance.db)
+
+    def _getCharacterVariants(self, char):
+        """
+        Gets a list of variant forms of the given character.
+
+        @type headword: string
+        @param headword: headword
+        @rtype: list of strings
+        @return: headword variant forms
+        """
+        variants = set(char)
+        # get variants from Unihan
+        variants.update([c for c, _ in
+            self._characterLookup.getAllCharacterVariants(char)])
+        # get radical equivalent char
+        if self._characterLookup.isRadicalChar(char):
+            try:
+                equivChar = self._characterLookup\
+                    .getRadicalFormEquivalentCharacter(char)
+                variants.add(equivChar)
+            except cjklib.exception.UnsupportedError:
+                # pass if no equivalent char exists
+                pass
+
+        return variants
+
+    # TODO cached
+    def _getPossibleHeadwordVariants(self, headwordStr):
+        singleCharacterVariants = [self._getCharacterVariants(char) \
+            for char in headwordStr]
+
+        variants = set(map(''.join, cross(*singleCharacterVariants)))
+        variants.remove(headwordStr)
+        return variants
+
+    def getWhereClause(self, column, headwordStr):
+        return column.in_(self._getPossibleHeadwordVariants(headwordStr))
+
+    def getMatchFunction(self, headwordStr):
+        searchStrings = self._getPossibleHeadwordVariants(headwordStr)
+        return lambda cell: cell in searchStrings
+
+
 class ExtendedDictionarySupport(object):
     """
     Partial class that adds further searching capabilities to dictionaries:
@@ -401,25 +571,11 @@ class ExtendedDictionarySupport(object):
         - Search for similar pronunciations mixed with headword
         - Get a random entry
 
-    TODO
+    Further features:
         - Unify entries with same headword
+    TODO
         - Split entries with different translation fields
     """
-    DEFAULT_SEARCH_STRATEGIES = {
-            'headwordSearchStrategy': search.Wildcard,
-            'readingSearchStrategy': search.Wildcard,
-            'translationSearchStrategy': search.SimpleWildcardTranslation,
-            }
-
-    @classmethod
-    def _setDefaults(cls, options, defaults=None):
-        defaults = defaults or cls.DEFAULT_SEARCH_STRATEGIES
-        for strategy in cls.DEFAULT_SEARCH_STRATEGIES:
-            if strategy not in options:
-                print cls.DEFAULT_SEARCH_STRATEGIES[strategy]
-                options[strategy] = cls.DEFAULT_SEARCH_STRATEGIES[strategy](
-                    singleCharacter='?', multipleCharacters='*')
-
     def __init__(self, **options):
         """
         Initialises the ExtendedDictionarySupport instance.
@@ -469,6 +625,29 @@ class ExtendedDictionarySupport(object):
                 'setDictionaryInstance')):
             self.mixedSimilarReadingSearchStrategy.setDictionaryInstance(self)
 
+        if 'headwordVariantSearchStrategy' in options:
+            self.headwordVariantSearchStrategy \
+                = options['headwordVariantSearchStrategy']
+        else:
+            self.headwordVariantSearchStrategy = HeadwordVariant()
+            """Strategy for searching headword substrings."""
+        if hasattr(self.headwordVariantSearchStrategy,
+            'setDictionaryInstance'):
+            self.headwordVariantSearchStrategy.setDictionaryInstance(self)
+
+        dictionaryTable = self.db.tables[self.DICTIONARY_TABLE]
+        self._dictionaryPrefer = 'Weight' in dictionaryTable.columns
+
+    def _checkOrderByWeight(self, orderBy):
+        if orderBy and 'Weight' in orderBy:
+            if self._dictionaryPrefer:
+                dictionaryTable = self.db.tables[self.DICTIONARY_TABLE]
+
+                orderByWeight = func.ifnull(dictionaryTable.c.Weight, 100)
+                orderBy[orderBy.index('Weight')] =  orderByWeight
+            else:
+                orderBy.remove('Weight')
+
     def _getHeadwordEntitiesSearch(self, headwordStr, readingStr, **options):
         dictionaryTable = self.db.tables[self.DICTIONARY_TABLE]
 
@@ -484,7 +663,7 @@ class ExtendedDictionarySupport(object):
         return ([headwordEntitiesClause],
             [(['Headword', 'Reading'], headwordEntitiesMatchFunc)])
 
-    def getForHeadwordEntities(self, headwordStr, readingStr=None, limit=None,
+    def getEntitiesForHeadword(self, headwordStr, readingStr=None, limit=None,
         orderBy=None, **options):
         # TODO raises conversion error
         clauses, filters = self._getHeadwordEntitiesSearch(headwordStr,
@@ -505,7 +684,7 @@ class ExtendedDictionarySupport(object):
         return ([headwordSubstringClause],
             [(['Headword'], headwordSubstringMatchFunc)])
 
-    def getForHeadwordSubstring(self, headwordStr, limit=None, orderBy=None):
+    def getSubstringsForHeadword(self, headwordStr, limit=None, orderBy=None):
         clauses, filters = self._getHeadwordSubstringSearch(headwordStr)
 
         return self._search(or_(*clauses), filters, limit, orderBy)
@@ -548,7 +727,31 @@ class ExtendedDictionarySupport(object):
 
         return self._search(or_(*clauses), filters, limit, orderBy)
 
+    def _getHeadwordVariantSearch(self, headwordStr, **options):
+        dictionaryTable = self.db.tables[self.DICTIONARY_TABLE]
+
+        headwordSubstringClause \
+            = self.headwordVariantSearchStrategy.getWhereClause(
+                dictionaryTable.c.Headword, headwordStr)
+
+        headwordSubstringMatchFunc \
+            = self.headwordVariantSearchStrategy.getMatchFunction(headwordStr)
+
+        return ([headwordSubstringClause],
+            [(['Headword'], headwordSubstringMatchFunc)])
+
+    def getVariantsForHeadword(self, headwordStr, limit=None, orderBy=None,
+        **options):
+        # TODO don't match "main" headword for given string
+        clauses, filters = self._getHeadwordVariantSearch(headwordStr,
+            **options)
+
+        return self._search(or_(*clauses), filters, limit, orderBy)
+
     def getRandomEntry(self):
+        # TODO add constraint that random entry needs to fulfill, e.g.
+        #   frequency > 10
+        # TODO add offset support to cjklib.dictionary and use _search() here
         dictionaryTable = self.db.tables[self.DICTIONARY_TABLE]
         entryCount = self.db.selectScalar(
             select([func.count(dictionaryTable.c[self.COLUMNS[0]])]))
@@ -575,15 +778,7 @@ class ExtendedDictionarySupport(object):
 
 
 class ExtendedCEDICTStyleSupport(ExtendedDictionarySupport):
-    DEFAULT_SEARCH_STRATEGIES = {
-            'headwordSearchStrategy': search.Wildcard,
-            'readingSearchStrategy': search.TonelessWildcardReading,
-            'mixedReadingSearchStrategy': search.MixedTonelessWildcardReading,
-            'translationSearchStrategy': search.SimpleWildcardTranslation,
-            }
-
     def __init__(self, **options):
-        ExtendedDictionarySupport.__init__(self, **options)
         if 'readingSimilarSearchStrategy' not in options:
             options['readingSimilarSearchStrategy'] = SimilarWildcardReading()
         if 'mixedSimilarReadingSearchStrategy' not in options:
@@ -591,6 +786,7 @@ class ExtendedCEDICTStyleSupport(ExtendedDictionarySupport):
                 = MixedSimilarWildcardReading()
         if 'headwordEntitiesSearchStrategy' not in options:
             options['headwordEntitiesSearchStrategy'] = HeadwordEntityReading()
+        ExtendedDictionarySupport.__init__(self, **options)
 
     def _getHeadwordEntitiesSearch(self, headwordStr, readingStr, **options):
         dictionaryTable = self.db.tables[self.DICTIONARY_TABLE]
@@ -682,48 +878,130 @@ class ExtendedCEDICTStyleSupport(ExtendedDictionarySupport):
 
         return clauses, filters
 
+    def _getHeadwordVariantSearch(self, headwordStr, **options):
+        dictionaryTable = self.db.tables[self.DICTIONARY_TABLE]
 
-class ExtendedEDICT(EDICT, ExtendedDictionarySupport):
+        clauses = []
+        filters = []
+        if self.headword != 't':
+            clauses.append(self.headwordVariantSearchStrategy.getWhereClause(
+                dictionaryTable.c.HeadwordSimplified, headwordStr))
+            filters.append((['HeadwordSimplified'],
+                self.headwordVariantSearchStrategy.getMatchFunction(
+                    headwordStr)))
+        if self.headword != 's':
+            clauses.append(self.headwordVariantSearchStrategy.getWhereClause(
+                dictionaryTable.c.HeadwordTraditional, headwordStr))
+            filters.append((['HeadwordTraditional'],
+                self.headwordVariantSearchStrategy.getMatchFunction(
+                    headwordStr)))
+
+        return clauses, filters
+
+
+class _EDICTDictionaryDefaults(object):
+    DEFAULT_SEARCH_STRATEGIES = {
+            'headwordSearchStrategy': search.Wildcard,
+            'readingSearchStrategy': search.Wildcard,
+            'translationSearchStrategy': search.SimpleWildcardTranslation,
+            }
+
+    @classmethod
+    def _setDefaults(cls, options, userdefaults=None):
+        userdefaults = userdefaults or {}
+        defaults = cls.DEFAULT_SEARCH_STRATEGIES.copy()
+        defaults.update(userdefaults)
+        for strategy in defaults:
+            if strategy not in options:
+                options[strategy] = defaults[strategy](singleCharacter='?',
+                    multipleCharacters='*')
+
+
+class ExtendedEDICT(_EDICTDictionaryDefaults, EDICT, ExtendedDictionarySupport):
     def __init__(self, **options):
         self._setDefaults(options)
+        options['entryFactory'] = EDICTEntry() # TODO
         EDICT.__init__(self, **options)
         ExtendedDictionarySupport.__init__(self, **options)
 
+    def _search(self, whereClause, filters, limit, orderBy):
+        self._checkOrderByWeight(orderBy)
+        return EDICT._search(self, whereClause, filters, limit, orderBy)
 
-class ExtendedCEDICTGR(CEDICTGR, ExtendedDictionarySupport):
+
+class ExtendedCEDICTGR(_EDICTDictionaryDefaults, CEDICTGR,
+    ExtendedDictionarySupport):
     # TODO similar reading support for CEDICTGR
     def __init__(self, **options):
-        self._setDefaults(options)
         self._setDefaults(options, {
             'translationSearchStrategy': search.CEDICTWildcardTranslation,
             'headwordEntitiesSearchStrategy': HeadwordEntityReading
             })
+        options['entryFactory'] = EDICTEntry() # TODO
         CEDICTGR.__init__(self, **options)
         ExtendedDictionarySupport.__init__(self, **options)
 
+    def _search(self, whereClause, filters, limit, orderBy):
+        self._checkOrderByWeight(orderBy)
+        return CEDICTGR._search(self, whereClause, filters, limit, orderBy)
 
-class ExtendedCEDICT(CEDICT, ExtendedCEDICTStyleSupport):
+
+class _CEDICTDictionaryDefaults(_EDICTDictionaryDefaults):
+    DEFAULT_SEARCH_STRATEGIES = {
+            'headwordSearchStrategy': search.Wildcard,
+            'readingSearchStrategy': search.TonelessWildcardReading,
+            'mixedReadingSearchStrategy': search.MixedTonelessWildcardReading,
+            'translationSearchStrategy': search.SimpleWildcardTranslation,
+            }
+
+    @classmethod
+    def _setDefaults(cls, options, userdefaults=None):
+        userdefaults = userdefaults or {}
+        defaults = cls.DEFAULT_SEARCH_STRATEGIES.copy()
+        defaults.update(userdefaults)
+        for strategy in defaults:
+            if strategy not in options:
+                options[strategy] = defaults[strategy](singleCharacter='?',
+                    multipleCharacters='*')
+        if 'entryFactory' not in options:
+            #options['entryFactory'] = HeadwordAlternative()
+            options['entryFactory'] = CEDICTEntry()
+
+
+class ExtendedCEDICT(_CEDICTDictionaryDefaults, CEDICT,
+    ExtendedCEDICTStyleSupport):
     def __init__(self, **options):
-        self._setDefaults(options)
         self._setDefaults(options,
             {'translationSearchStrategy': search.CEDICTWildcardTranslation})
         CEDICT.__init__(self, **options)
         ExtendedCEDICTStyleSupport.__init__(self, **options)
 
+    def _search(self, whereClause, filters, limit, orderBy):
+        self._checkOrderByWeight(orderBy)
+        return CEDICT._search(self, whereClause, filters, limit, orderBy)
 
-class ExtendedHanDeDict(HanDeDict, ExtendedCEDICTStyleSupport):
+
+class ExtendedHanDeDict(_CEDICTDictionaryDefaults, HanDeDict,
+    ExtendedCEDICTStyleSupport):
     def __init__(self, **options):
-        self._setDefaults(options)
         self._setDefaults(options,
             {'translationSearchStrategy': search.HanDeDictWildcardTranslation})
         HanDeDict.__init__(self, **options)
         ExtendedCEDICTStyleSupport.__init__(self, **options)
 
+    def _search(self, whereClause, filters, limit, orderBy):
+        self._checkOrderByWeight(orderBy)
+        return HanDeDict._search(self, whereClause, filters, limit, orderBy)
 
-class ExtendedCFDICT(CFDICT, ExtendedCEDICTStyleSupport):
+
+class ExtendedCFDICT(_CEDICTDictionaryDefaults, CFDICT,
+    ExtendedCEDICTStyleSupport):
     def __init__(self, **options):
-        self._setDefaults(options)
         self._setDefaults(options,
             {'translationSearchStrategy': search.HanDeDictWildcardTranslation})
         CFDICT.__init__(self, **options)
         ExtendedCEDICTStyleSupport.__init__(self, **options)
+
+    def _search(self, whereClause, filters, limit, orderBy):
+        self._checkOrderByWeight(orderBy)
+        return CFDICT._search(self, whereClause, filters, limit, orderBy)
