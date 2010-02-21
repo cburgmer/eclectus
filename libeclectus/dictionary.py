@@ -5,8 +5,10 @@ High level dictionary access.
 """
 
 import re
+import random
 
-from sqlalchemy.sql import and_, or_
+from sqlalchemy import select
+from sqlalchemy.sql import and_, or_, func
 
 from cjklib.dictionary import EDICT, CEDICT, CEDICTGR, HanDeDict, CFDICT, search
 from cjklib.reading import ReadingFactory
@@ -372,36 +374,21 @@ class MixedSimilarWildcardReading(search.SimpleReading,
         return self._getWildcardMatchFunction(searchStr, **options)
 
 
-class ExactMultiple(object):
+class ExactMultiple(search.Exact):
     """Exact search strategy class matching any strings from a list."""
-    def getWhereClause(self, column, searchStrings):
-        """
-        Returns a SQLAlchemy clause that is the necessary condition for a
-        possible match. This clause is used in the database query. Results may
-        then be further narrowed by L{getMatchFunction()}.
+    @staticmethod
+    def _getSubstrings(headwordStr):
+        headwordSubstrings = []
+        for left in range(0, len(headwordStr)):
+            for right in range(len(headwordStr), left, -1):
+                headwordSubstrings.append(headwordStr[left:right])
+        return headwordSubstrings
 
-        @type column: SQLAlchemy column instance
-        @param column: column to check against
-        @type searchStrings: list of str
-        @param searchStrings: search strings
-        @return: SQLAlchemy clause
-        """
-        return column.in_(searchStrings)
+    def getWhereClause(self, column, headwordStr):
+        return column.in_(self._getSubstrings(headwordStr))
 
-    def getMatchFunction(self, searchStrings):
-        """
-        Gets a function that returns C{True} if the entry's cell content matches
-        any of the search strings.
-
-        This method provides the sufficient condition for a match. Note that
-        matches from other SQL clauses might get included which do not fulfill
-        the conditions of L{getWhereClause()}.
-
-        @type searchStrings: list of str
-        @param searchStrings: search strings
-        @rtype: function
-        @return: function that returns C{True} if the entry is a match
-        """
+    def getMatchFunction(self, headwordStr):
+        searchStrings = self._getSubstrings(headwordStr)
         return lambda cell: cell in searchStrings
 
 
@@ -412,14 +399,27 @@ class ExtendedDictionarySupport(object):
         - Get all entries for substrings of a headword
         - Search for similar pronunciations
         - Search for similar pronunciations mixed with headword
-    TODO
         - Get a random entry
 
     TODO
-        - Use * and ? as wildcards
         - Unify entries with same headword
         - Split entries with different translation fields
     """
+    DEFAULT_SEARCH_STRATEGIES = {
+            'headwordSearchStrategy': search.Wildcard,
+            'readingSearchStrategy': search.Wildcard,
+            'translationSearchStrategy': search.SimpleWildcardTranslation,
+            }
+
+    @classmethod
+    def _setDefaults(cls, options, defaults=None):
+        defaults = defaults or cls.DEFAULT_SEARCH_STRATEGIES
+        for strategy in cls.DEFAULT_SEARCH_STRATEGIES:
+            if strategy not in options:
+                print cls.DEFAULT_SEARCH_STRATEGIES[strategy]
+                options[strategy] = cls.DEFAULT_SEARCH_STRATEGIES[strategy](
+                    singleCharacter='?', multipleCharacters='*')
+
     def __init__(self, **options):
         """
         Initialises the ExtendedDictionarySupport instance.
@@ -428,7 +428,6 @@ class ExtendedDictionarySupport(object):
             strategy instance
         @keyword headwordSubstringSearchStrategy: headword substring search
             strategy instance
-        # TODO to specific for EDICT
         """
         if 'headwordEntitiesSearchStrategy' in options:
             self.headwordEntitiesSearchStrategy \
@@ -454,7 +453,7 @@ class ExtendedDictionarySupport(object):
             self.readingSimilarSearchStrategy \
                 = options['readingSimilarSearchStrategy']
         else:
-            self.readingSimilarSearchStrategy = SimilarWildcardReading()
+            self.readingSimilarSearchStrategy = None
             """Strategy for searching similar readings."""
         if hasattr(self.readingSimilarSearchStrategy, 'setDictionaryInstance'):
             self.readingSimilarSearchStrategy.setDictionaryInstance(self)
@@ -463,8 +462,7 @@ class ExtendedDictionarySupport(object):
             self.mixedSimilarReadingSearchStrategy \
                 = options['mixedSimilarReadingSearchStrategy']
         else:
-            self.mixedSimilarReadingSearchStrategy \
-                = MixedSimilarWildcardReading()
+            self.mixedSimilarReadingSearchStrategy = None
             """Strategy for mixed searching of headword/similar reading."""
         if (self.mixedSimilarReadingSearchStrategy
             and hasattr(self.mixedSimilarReadingSearchStrategy,
@@ -486,7 +484,7 @@ class ExtendedDictionarySupport(object):
         return ([headwordEntitiesClause],
             [(['Headword', 'Reading'], headwordEntitiesMatchFunc)])
 
-    def getForHeadwordEntities(self, headwordStr, readingStr, limit=None,
+    def getForHeadwordEntities(self, headwordStr, readingStr=None, limit=None,
         orderBy=None, **options):
         # TODO raises conversion error
         clauses, filters = self._getHeadwordEntitiesSearch(headwordStr,
@@ -495,20 +493,14 @@ class ExtendedDictionarySupport(object):
         return self._search(or_(*clauses), filters, limit, orderBy)
 
     def _getHeadwordSubstringSearch(self, headwordStr, **options):
-        headwordSubstrings = []
-        for left in range(0, len(headwordStr)):
-            for right in range(len(headwordStr), left, -1):
-                headwordSubstrings.append(headwordStr[left:right])
-
         dictionaryTable = self.db.tables[self.DICTIONARY_TABLE]
 
         headwordSubstringClause \
             = self.headwordSubstringSearchStrategy.getWhereClause(
-                dictionaryTable.c.Headword, headwordSubstrings)
+                dictionaryTable.c.Headword, headwordStr)
 
         headwordSubstringMatchFunc \
-            = self.headwordSubstringSearchStrategy.getMatchFunction(
-                headwordSubstrings)
+            = self.headwordSubstringSearchStrategy.getMatchFunction(headwordStr)
 
         return ([headwordSubstringClause],
             [(['Headword'], headwordSubstringMatchFunc)])
@@ -556,8 +548,50 @@ class ExtendedDictionarySupport(object):
 
         return self._search(or_(*clauses), filters, limit, orderBy)
 
+    def getRandomEntry(self):
+        dictionaryTable = self.db.tables[self.DICTIONARY_TABLE]
+        entryCount = self.db.selectScalar(
+            select([func.count(dictionaryTable.c[self.COLUMNS[0]])]))
+
+        entryIdx = random.randrange(entryCount)
+
+        # lookup in db
+        results = self.db.selectRows(
+            select([dictionaryTable.c[col] for col in self.COLUMNS])\
+                .offset(entryIdx).limit(1))
+
+        # format readings and translations
+        for column, formatStrategy in self.columnFormatStrategies.items():
+            columnIdx = self.COLUMNS.index(column)
+            for idx in range(len(results)):
+                rowList = list(results[idx])
+                rowList[columnIdx] = formatStrategy.format(rowList[columnIdx])
+                results[idx] = tuple(rowList)
+
+        # format results
+        entries = self.entryFactory.getEntries(results)
+
+        return entries
+
 
 class ExtendedCEDICTStyleSupport(ExtendedDictionarySupport):
+    DEFAULT_SEARCH_STRATEGIES = {
+            'headwordSearchStrategy': search.Wildcard,
+            'readingSearchStrategy': search.TonelessWildcardReading,
+            'mixedReadingSearchStrategy': search.MixedTonelessWildcardReading,
+            'translationSearchStrategy': search.SimpleWildcardTranslation,
+            }
+
+    def __init__(self, **options):
+        ExtendedDictionarySupport.__init__(self, **options)
+        if 'readingSimilarSearchStrategy' not in options:
+            options['readingSimilarSearchStrategy'] = SimilarWildcardReading()
+        if 'mixedSimilarReadingSearchStrategy' not in options:
+            options['mixedSimilarReadingSearchStrategy'] \
+                = MixedSimilarWildcardReading()
+        if 'headwordEntitiesSearchStrategy' not in options:
+            options['headwordEntitiesSearchStrategy'] = HeadwordEntityReading()
+
     def _getHeadwordEntitiesSearch(self, headwordStr, readingStr, **options):
         dictionaryTable = self.db.tables[self.DICTIONARY_TABLE]
 
@@ -584,27 +618,22 @@ class ExtendedCEDICTStyleSupport(ExtendedDictionarySupport):
         return clauses, filters
 
     def _getHeadwordSubstringSearch(self, headwordStr, **options):
-        headwordSubstrings = []
-        for left in range(0, len(headwordStr)):
-            for right in range(len(headwordStr), left, -1):
-                headwordSubstrings.append(headwordStr[left:right])
-
         dictionaryTable = self.db.tables[self.DICTIONARY_TABLE]
 
         clauses = []
         filters = []
         if self.headword != 't':
             clauses.append(self.headwordSubstringSearchStrategy.getWhereClause(
-                dictionaryTable.c.HeadwordSimplified, headwordSubstrings))
+                dictionaryTable.c.HeadwordSimplified, headwordStr))
             filters.append((['HeadwordSimplified'],
                 self.headwordSubstringSearchStrategy.getMatchFunction(
-                    headwordSubstrings)))
+                    headwordStr)))
         if self.headword != 's':
             clauses.append(self.headwordSubstringSearchStrategy.getWhereClause(
-                dictionaryTable.c.HeadwordTraditional, headwordSubstrings))
+                dictionaryTable.c.HeadwordTraditional, headwordStr))
             filters.append((['HeadwordTraditional'],
                 self.headwordSubstringSearchStrategy.getMatchFunction(
-                    headwordSubstrings)))
+                    headwordStr)))
 
         return clauses, filters
 
@@ -654,10 +683,47 @@ class ExtendedCEDICTStyleSupport(ExtendedDictionarySupport):
         return clauses, filters
 
 
+class ExtendedEDICT(EDICT, ExtendedDictionarySupport):
+    def __init__(self, **options):
+        self._setDefaults(options)
+        EDICT.__init__(self, **options)
+        ExtendedDictionarySupport.__init__(self, **options)
+
+
+class ExtendedCEDICTGR(CEDICTGR, ExtendedDictionarySupport):
+    # TODO similar reading support for CEDICTGR
+    def __init__(self, **options):
+        self._setDefaults(options)
+        self._setDefaults(options, {
+            'translationSearchStrategy': search.CEDICTWildcardTranslation,
+            'headwordEntitiesSearchStrategy': HeadwordEntityReading
+            })
+        CEDICTGR.__init__(self, **options)
+        ExtendedDictionarySupport.__init__(self, **options)
+
+
 class ExtendedCEDICT(CEDICT, ExtendedCEDICTStyleSupport):
     def __init__(self, **options):
-        if 'headwordEntitiesSearchStrategy' not in options:
-            options['headwordEntitiesSearchStrategy'] = HeadwordEntityReading()
+        self._setDefaults(options)
+        self._setDefaults(options,
+            {'translationSearchStrategy': search.CEDICTWildcardTranslation})
         CEDICT.__init__(self, **options)
         ExtendedCEDICTStyleSupport.__init__(self, **options)
 
+
+class ExtendedHanDeDict(HanDeDict, ExtendedCEDICTStyleSupport):
+    def __init__(self, **options):
+        self._setDefaults(options)
+        self._setDefaults(options,
+            {'translationSearchStrategy': search.HanDeDictWildcardTranslation})
+        HanDeDict.__init__(self, **options)
+        ExtendedCEDICTStyleSupport.__init__(self, **options)
+
+
+class ExtendedCFDICT(CFDICT, ExtendedCEDICTStyleSupport):
+    def __init__(self, **options):
+        self._setDefaults(options)
+        self._setDefaults(options,
+            {'translationSearchStrategy': search.HanDeDictWildcardTranslation})
+        CFDICT.__init__(self, **options)
+        ExtendedCEDICTStyleSupport.__init__(self, **options)
