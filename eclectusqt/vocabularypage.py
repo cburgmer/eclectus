@@ -562,8 +562,8 @@ class VocabularyPage(QWidget, VocabularyPageUI.Ui_Form):
             characterinfo.CharacterInfo)
         entry['HeadwordLanguage'] = charInfo.language
         if charInfo.dictionary:
-            _, _, _, _, lang, _ \
-                = characterinfo.CharacterInfo.DICTIONARY_INFO[charInfo.dictionary] # TODO
+            lang = characterinfo.CharacterInfo.DICTIONARY_TRANSLATION_LANG[
+                charInfo.dictionary] # TODO
             entry['TranslationLanguage'] = lang
         entry['PronunciationType'] = charInfo.reading
 

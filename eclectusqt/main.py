@@ -571,8 +571,7 @@ class MainWindow(KXmlGuiWindow):
         self.dictionaryList = []
         currentIndex = None
         for dictionary in dictionaries:
-            _, _, _, lang, _, _ \
-                = characterinfo.CharacterInfo.DICTIONARY_INFO[dictionary]
+            lang = characterinfo.CharacterInfo.DICTIONARY_LANG[dictionary]
             for language in languages:
                 if language.startswith(lang):
                     seenLanguages.add(language)
