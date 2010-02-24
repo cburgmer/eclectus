@@ -671,6 +671,8 @@ class MainWindow(KXmlGuiWindow):
         charInfo = self.renderThread.getObjectInstance(
             characterinfo.CharacterInfo)
         reading = self.readingNameLookup[transcription]
+        language = charInfo.language
+        dictionary = charInfo.dictionary
         if reading == charInfo.reading:
             return
 
