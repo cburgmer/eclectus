@@ -34,17 +34,19 @@ from cjklib import characterlookup
 from cjklib.reading import ReadingFactory
 from cjklib import exception
 from cjklib.util import cross
-from cjklib.dictionary import getAvailableDictionaries
 
 from libeclectus import util
-from libeclectus.dictionary import getDictionaryClasses, getDictionary
+from libeclectus.dictionary import (getDictionaryClasses, getDictionary,
+    getDefaultDictionary, getAvailableDictionaryNames,
+    LANGUAGE_COMPATIBLE_MAPPINGS)
+from libeclectus.chardb import CharacterDB
 
 class CharacterInfo:
     """
     Provides lookup method services.
     """
     LANGUAGE_CHAR_LOCALE_MAPPING = {'zh-cmn-Hans': 'C', 'zh-cmn-Hant': 'T',
-        'zh-yue': 'T', 'ko': 'T', 'ja': 'J', 'vi': 'V'}
+        'zh-yue-Hant': 'T', 'zh-yue-Hans': 'C', 'ko': 'T', 'ja': 'J', 'vi': 'V'}
     """Mapping table for language to default character locale."""
 
     LOCALE_LANGUAGE_MAPPING = {'zh': 'zh-cmn-Hans', 'zh_CN': 'zh-cmn-Hans',
@@ -53,8 +55,8 @@ class CharacterInfo:
     """Mapping table for locale to default language."""
 
     LANGUAGE_DEFAULT_READING = {'zh-cmn-Hans': 'Pinyin',
-        'zh-cmn-Hant': 'Pinyin', 'zh-yue': 'CantoneseYale', 'ko': 'Hangul',
-        'ja': 'Kana'}
+        'zh-cmn-Hant': 'Pinyin', 'zh-yue-Hant': 'CantoneseYale', 'ko': 'Hangul',
+        'ja': 'Kana', 'zh-yue-Hans': 'CantoneseYale'}
     """Character locale's default character reading."""
 
     DICTIONARY_LANG = {'HanDeDict': 'zh-cmn', 'CFDICT': 'zh-cmn',
@@ -72,7 +74,8 @@ class CharacterInfo:
     AVAILABLE_READINGS = {
         'zh-cmn-Hans': ['Pinyin', 'WadeGiles', 'MandarinIPA', 'GR'],
         'zh-cmn-Hant': ['Pinyin', 'WadeGiles', 'MandarinIPA', 'GR'],
-        'zh-yue': ['Jyutping', 'CantoneseYale'], 'ko': ['Hangul'],
+        'zh-yue-Hans': ['Jyutping', 'CantoneseYale'],
+        'zh-yue-Hant': ['Jyutping', 'CantoneseYale'], 'ko': ['Hangul'],
         'ja': ['Kana']}
     """All readings available for a language."""
 
@@ -80,19 +83,8 @@ class CharacterInfo:
         ('GR', 'MandarinIPA')]
     """Reading conversions incompatible under practical considerations."""
 
-    TONAL_READING = {'Pinyin': {'toneMarkType': 'None'},
-        'WadeGiles': {'toneMarkType': 'None'},
-        'Jyutping': {'toneMarkType': 'None'},
-        'CantoneseYale': {'toneMarkType': 'None'}}
-    """
-    Dictionary of tonal readings with reading options to remove tonal features.
-    """
-
     READING_OPTIONS = {'WadeGiles': {'toneMarkType': 'superscriptNumbers'}}
     """Special reading options for output."""
-
-    SPECIAL_TONAL_READINGS = ['GR']
-    """List of tonal readings, that can't be easily displayed in plain form."""
 
     RADICALS_NON_VISUAL_EQUIVALENCE = set([u'⺄', u'⺆', u'⺇', u'⺈', u'⺊',
         u'⺌', u'⺍', u'⺎', u'⺑', u'⺗', u'⺜', u'⺥', u'⺧', u'⺪', u'⺫', u'⺮',
@@ -109,7 +101,7 @@ class CharacterInfo:
     """
 
     def __init__(self, language=None, reading=None, dictionary=None,
-        characterDomain=None, databaseUrl=None):
+        characterDomain=None, databaseUrl=None, translationLanguage=None):
         """
         Initialises the CharacterInfo object.
         """
@@ -128,41 +120,34 @@ class CharacterInfo:
         self.db = DatabaseConnector.getDBConnector(configuration)
 
         self.availableDictionaries = None
+        self.getAvailableDictionaries()
 
-        if language and language in self.LANGUAGE_CHAR_LOCALE_MAPPING:
-            self.language = language
-        else:
-            # try to figure out language using locale settings, and existing
-            #   dictionary
-            language = self.guessLanguage()
-            if language:
-                self.language = language
-            else:
-                # take a language from an existing dictionary
-                dictionaries = self.getAvailableDictionaries()
-                self.language = self.LANGUAGE_CHAR_LOCALE_MAPPING.keys()[0]
-                if dictionaries:
-                    cjkLang = self.DICTIONARY_LANG.get(dictionaries[0], None)
-                    for language in self.LANGUAGE_CHAR_LOCALE_MAPPING:
-                        if language.startswith(cjkLang):
-                            self.language = language
-                            break
+        self._dictionaryInst = None
+        if dictionary:
+            self._dictionaryInst = getDictionary(dictionary, reading=reading,
+                language=language, characterDomain=characterDomain,
+                dbConnectInst=self.db, ignoreIllegalSettings=True)
+
+        # fallback
+        if not self._dictionaryInst:
+            self._dictionaryInst = getDefaultDictionary(translationLanguage,
+                reading=reading, language=language,
+                characterDomain=characterDomain, dbConnectInst=self.db,
+                ignoreIllegalSettings=True)
+
+        self.dictionary = self._dictionaryInst.PROVIDES
+        self.language = self._dictionaryInst.language
+        self.reading = self._dictionaryInst.reading
 
         self.locale = self.LANGUAGE_CHAR_LOCALE_MAPPING[self.language]
 
-        self.characterLookup = characterlookup.CharacterLookup(self.locale,
-            dbConnectInst=self.db)
+        self.characterLookup = CharacterDB(self.language,
+            characterDomain=characterDomain, dbConnectInst=self.db,
+            ignoreIllegalSettings=True)
+        self.characterDomain = self.characterLookup.characterDomain
+
         self.characterLookupTraditional = characterlookup.CharacterLookup('T',
             dbConnectInst=self.db)
-
-        # character domain
-        if characterDomain and characterDomain \
-            in self.characterLookup.getAvailableCharacterDomains():
-            self.characterDomain = characterDomain
-        else:
-            self.characterDomain = 'Unicode'
-        self.characterLookup.setCharacterDomain(self.characterDomain)
-        self.characterLookupTraditional.setCharacterDomain(self.characterDomain)
 
         self.readingFactory = ReadingFactory(dbConnectInst=self.db)
 
@@ -174,37 +159,6 @@ class CharacterInfo:
         for readingA, readingB in self.INCOMPATIBLE_READINGS:
             self.incompatibleConversions[readingA].add(readingB)
             self.incompatibleConversions[readingB].add(readingA)
-
-        compatible = self.getCompatibleDictionaries(self.language)
-
-        if not compatible:
-            self.dictionary = None
-        elif dictionary and dictionary in compatible:
-            self.dictionary = dictionary
-        else:
-            # set a random one
-            self.dictionary = compatible[0]
-
-        if self.dictionary:
-            self._dictionaryInst = getDictionary(self.dictionary,
-                dbConnectInst=self.db)
-
-        if self.dictionary:
-            compatible = self.getCompatibleReadings(self.language)
-            if reading and reading in compatible:
-                self.reading = reading
-            else:
-                if self.language in self.LANGUAGE_DEFAULT_READING \
-                    and self.LANGUAGE_DEFAULT_READING[self.language] \
-                        in compatible:
-                    self.reading = self.LANGUAGE_DEFAULT_READING[self.language]
-                else:
-                    self.reading = self.dictionary.READING
-        else:
-            if self.language in self.LANGUAGE_DEFAULT_READING:
-                self.reading = self.LANGUAGE_DEFAULT_READING[self.language]
-            else:
-                self.reading = self.AVAILABLE_READINGS[self.language][0]
 
         self.minimalCharacterComponents = None
         self.radicalForms = None
@@ -226,6 +180,8 @@ class CharacterInfo:
                         = self.pronunciationLookup[pronReading]
 
         self._availableCharacterDomains = self.characterLookup.getAvailableCharacterDomains() # TODO
+        self.getCompatibleCharacterDomains() # TODO
+
     #{ Settings
 
     @staticmethod
@@ -233,30 +189,6 @@ class CharacterInfo:
         languageCodes = language.split('-')
         # return ISO 639-2 and ISO 639-3 code
         return '-'.join([code for code in languageCodes if len(code) < 4])
-
-    def guessLanguage(self):
-        """
-        Guesses the language using the user's locale settings.
-
-        @rtype: character
-        @return: locale
-        """
-        # get local language and output encoding
-        language, _ = locale.getdefaultlocale()
-
-        # get language code
-        if language.find('_') >= 0:
-            languageCode, _ = language.split('_', 1)
-        else:
-            languageCode = language
-
-        # get character locale
-        if language in self.LOCALE_LANGUAGE_MAPPING \
-            and self.getCompatibleDictionaries(language):
-            return self.LOCALE_LANGUAGE_MAPPING[language]
-        elif languageCode in self.LOCALE_LANGUAGE_MAPPING \
-            and self.getCompatibleDictionaries(languageCode):
-            return self.LOCALE_LANGUAGE_MAPPING[languageCode]
 
     def getAvailableDictionaries(self):
         """
@@ -266,12 +198,11 @@ class CharacterInfo:
         @return: names of available dictionaries
         """
         if self.availableDictionaries == None:
-            self.availableDictionaries = [d.PROVIDES for d
-                in getAvailableDictionaries()]
+            self.availableDictionaries = getAvailableDictionaryNames(self.db)
         return self.availableDictionaries
 
     def getDictionaryVersions(self):
-        dictionaries = self.getAvailableDictionaries()
+        dictionaries = getAvailableDictionaryNames(self.db, includePseudo=False)
         dictionaryVersions = self.getUpdateVersions(dictionaries)
 
         versionDict = {}
@@ -285,7 +216,7 @@ class CharacterInfo:
 
     def getCompatibleDictionaries(self, language):
         compatible = []
-        for dictionary in self.getAvailableDictionaries():
+        for dictionary in self.getAvailableDictionaryNames():
             cjkLang = self.DICTIONARY_LANG[dictionary]
             if language.startswith(cjkLang):
                 compatible.append(dictionary)
@@ -294,20 +225,26 @@ class CharacterInfo:
         return compatible
 
     def getCompatibleReadings(self, language):
-        compatible = []
-        if self.dictionary and self._dictionaryInst.READING:
-            dictReading = self._dictionaryInst.READING
-            for reading in self.AVAILABLE_READINGS[language]:
-                if dictReading == reading \
-                    or (self.readingFactory.isReadingConversionSupported(
-                        dictReading, reading) and \
-                    reading not in self.incompatibleConversions[dictReading]):
-                    compatible.append(reading)
-        else:
-            compatible = self.AVAILABLE_READINGS[language]
+        return LANGUAGE_COMPATIBLE_MAPPINGS[language]
+        #compatible = []
+        #if self.dictionary and self._dictionaryInst.READING:
+            #dictReading = self._dictionaryInst.READING
+            #for reading in self.AVAILABLE_READINGS[language]:
+                #if dictReading == reading \
+                    #or (self.readingFactory.isReadingConversionSupported(
+                        #dictReading, reading) and \
+                    #reading not in self.incompatibleConversions[dictReading]):
+                    #compatible.append(reading)
+        #else:
+            #compatible = self.AVAILABLE_READINGS[language]
 
-        compatible.sort()
-        return compatible
+        #compatible.sort()
+        #return compatible
+
+    def getCompatibleCharacterDomains(self):
+        if not hasattr(self, 'compatibleCharDomain'):
+            self.compatibleCharDomain = self.characterLookup.getCompatibleCharacterDomains()
+        return self.compatibleCharDomain
 
     def getCompatibleReadingsFor(self, language, dictionary):
         compatible = []
@@ -362,60 +299,6 @@ class CharacterInfo:
             if hasattr(classObj, 'guessReadingDialect'):
                 return classObj.guessReadingDialect(string)
         return {}
-
-    def buildExactReadings(self, entities, readingN, explicitEntities=False,
-        **options):
-        # TODO document, explicit generation of tonal entities, were replacement
-        #   of tonemarks by SQL placeholder is not appropriate
-        if readingN in self.TONAL_READING:
-            fullEntities = []
-            for entity in entities:
-                if self.readingFactory.isPlainReadingEntity(entity, readingN,
-                    **options):
-                    if explicitEntities:
-                        fullEntities.append(self._buildTonalEntities(entity,
-                            readingN, **options))
-                    else:
-                        fullEntities.append([entity + '_'])
-                else:
-                    fullEntities.append([entity])
-            return cross(*fullEntities)
-
-        return [entities]
-
-    def _buildTonalEntities(self, plainEntity, readingN, **options):
-        tonalEntities = set()
-        for tone in self.readingFactory.getTones(readingN):
-            try:
-                tonalEntities.add(self.readingFactory.getTonalEntity(
-                    plainEntity, tone, readingN, **options))
-            except exception.ConversionError, e:
-                pass
-        return tonalEntities
-
-    def convertCharacterReadings(self, result, readingN, **options):
-        # TODO document
-        conversionSupported = self.readingFactory.isReadingConversionSupported(
-            readingN, self.reading)
-
-        response = []
-        for char, charReading in result:
-            readingList = []
-            for entity in charReading:
-                if conversionSupported:
-                    try:
-                        readingList.append(self.readingFactory.convert(entity,
-                            readingN, self.reading, sourceOptions=options))
-                    except cjklib.exception.DecompositionError:
-                        readingList.append('[' + entity + ']')
-                    except cjklib.exception.ConversionError:
-                        entity = '[' + entity + ']'
-                        readingList.append('[' + entity + ']')
-                else:
-                    readingList.append(entity)
-
-            response.append((char, readingList))
-        return response
 
     def getEquivalentCharTable(self, componentList,
         includeEquivalentRadicalForms=False, includeSimilarCharacters=False):
@@ -514,27 +397,6 @@ class CharacterInfo:
             equivCharTable.append(list(componentEquivalents))
 
         return equivCharTable
-
-    def isSemanticVariant(self, char, variants):
-        """
-        Checks if the character is a semantic variant form of the given
-        characters.
-
-        @type char: character
-        @param char: Chinese character
-        @type variants: list of characters
-        @param variants: Chinese characters
-        @rtype: boolean
-        @return: C{True} if the character is a semantic variant form of the
-            given characters, C{False} otherwise.
-        """
-        vVariants = []
-        for variant in variants:
-            vVariants.extend(
-                self.characterLookup.getCharacterVariants(variant, 'M'))
-            vVariants.extend(
-                self.characterLookup.getCharacterVariants(variant, 'P'))
-        return char in vVariants
 
     def filterDomainCharacters(self, charList):
         """
@@ -983,6 +845,7 @@ class CharacterInfo:
         @return: radical index, reading and definition
         @todo Fix: Don't use dictionary language, but rather interface language
         """
+        # TODO don't use specific language for zh: zh-cmn and zh-yue can share
         if not hasattr(self, '_radicalDictionaryDict'):
             radicalTableName = None
             cjkLang = self.getLanguage(self.language)
@@ -1065,31 +928,6 @@ class CharacterInfo:
 
     #{ Variant
 
-    def getCharacterVariants(self, char):
-        """
-        Gets a list of variant forms of the given character.
-
-        @type headword: string
-        @param headword: headword
-        @rtype: list of strings
-        @return: headword variant forms
-        """
-        variants = set(char)
-        # get variants from Unihan
-        variants.update([c for c, _ in
-            self.characterLookup.getAllCharacterVariants(char)])
-        # get radical equivalent char
-        if self.characterLookup.isRadicalChar(char):
-            try:
-                equivChar = self.characterLookup\
-                    .getRadicalFormEquivalentCharacter(char)
-                variants.add(equivChar)
-            except cjklib.exception.UnsupportedError:
-                # pass if no equivalent char existent
-                pass
-
-        return variants
-
     def getHeadwordVariants(self, headword):
         """
         Gets a list of variant forms of the given headword.
@@ -1102,22 +940,6 @@ class CharacterInfo:
         variantEntries = self._dictionaryInst.getVariantsForHeadword(headword)
         return [e.Headword for e in variantEntries if e.Headword != headword]
 
-    def getCharacterSimilars(self, char):
-        """
-        Gets a list of variant forms of the given character.
-
-        @type headword: string
-        @param headword: headword
-        @rtype: list of strings
-        @return: headword variant forms
-        """
-        equiv = set(self.getEquivalentCharTable([char],
-            includeEquivalentRadicalForms=False,
-            includeSimilarCharacters=True)[0])
-        if char in equiv:
-            equiv.remove(char)
-        return equiv
-
     def getHeadwordSimilars(self, headword):
         """
         Gets a list of similar forms of the given headword.
@@ -1127,143 +949,10 @@ class CharacterInfo:
         @rtype: list of strings
         @return: headword variant forms
         """
-        # TODO implement in dictionary
-        return []
-        similarCharacters = []
-        for char in headword:
-            similarCharacters.append(self.getEquivalentCharTable([char],
-                includeEquivalentRadicalForms=False,
-                includeSimilarCharacters=True)[0])
-
-        # build word from single characters
-        similar = set([''.join(headwordSimilar) for headwordSimilar \
-            in cross(*similarCharacters)])
-        similar.remove(headword)
-
-        if similar:
-            # filter similar character combinations
-            return self.db.selectScalars(select(
-                [self.dictionaryTable.c[self.headwordColumn]],
-                self.dictionaryTable.c[self.headwordColumn].in_(similar),
-                distinct=True).order_by('Reading', self.headwordColumn))
-        else:
-            return []
-
-    #{ Simple character/reading mapping
-
-    def getCharactersForReading(self, readingString, readingN=None):
-        """
-        Gets all know characters for the given reading.
-
-        @type readingString: string
-        @param readingString: reading entity for lookup
-        @type readingN: string
-        @param readingN: name of reading
-        @rtype: list of chars
-        @return: list of characters for the given reading
-        @raise ValueError: if invalid reading entity or several entities are
-            given.
-        @raise UnsupportedError: if no mapping between characters and target
-            reading exists.
-        @raise ConversionError: if conversion from the internal source reading
-            to the given target reading fails.
-        """
-        if not readingN:
-            readingN = self.reading
-        options = self.getReadingOptions(readingString, readingN)
-
-        charList = set([])
-        charReadingDict = {}
-        for entities in self.buildExactReadings([readingString], readingN,
-            explicitEntities=True, **options):
-            if len(entities) != 1:
-                continue
-            entity = entities[0]
-            try:
-                chars = self.characterLookup.getCharactersForReading(
-                    entity, readingN, **options)
-                charList.update(chars)
-
-                for char in chars:
-                    if char not in charReadingDict:
-                        charReadingDict[char] = set()
-                    charReadingDict[char].add(entity)
-            except ValueError:
-                pass
-            except exception.ConversionError:
-                pass
-            except exception.UnsupportedError:
-                return []
-
-        return self.convertCharacterReadings(
-            [(char, charReadingDict[char]) for char in charList], readingN,
-            **options)
-
-    def getCharactersForSimilarReading(self, readingString, readingN=None):
-        """
-        Gets all know characters for the given reading.
-
-        @type readingString: string
-        @param readingString: reading entity for lookup
-        @type readingN: string
-        @param readingN: name of reading
-        @rtype: list of tuples of character and pronunciation
-        @return: list of characters for the given reading
-        @raise ValueError: if invalid reading entity or several entities are
-            given.
-        @raise UnsupportedError: if no mapping between characters and target
-            reading exists.
-        @raise ConversionError: if conversion from the internal source reading
-            to the given target reading fails.
-        @todo Fix: Put similar reading conversion together with dictionary part
-        """
-        # TODO remove
-        return []
-
-    def getReadingForCharacter(self, char):
-        """
-        Gets a list of readings for a given character.
-
-        @type char: character
-        @param char: Chinese character
-        @rtype: list of lists of strings
-        @return: a list of readings
-        @raise exception.UnsupportedError: raised when a translation from
-            character to reading is not supported by the given target reading
-        @raise exception.ConversionError: if conversion for the string is not
-            supported
-        @raise ValueError: on other exceptions
-        """
-        if self.reading in self.READING_OPTIONS:
-            targetOpt = self.READING_OPTIONS[self.reading]
-        else:
-            targetOpt = {}
-        try:
-            return self.characterLookup.getReadingForCharacter(char,
-                self.reading, **targetOpt)
-        except exception.ConversionError:
-            return []
-        except exception.UnsupportedError:
-            return []
-
-    def getReadingForCharString(self, charString):
-        """
-        Gets a list of readings per character in the given string.
-
-        @type charString: string
-        @param charString: headword string
-        @rtype: list of tuples
-        @return: one character matched to one reading entity each
-        """
-        readings = []
-        for char in charString:
-            try:
-                readings.append(self.characterLookup.getReadingForCharacter(
-                    char, self.reading))
-            except exception.UnsupportedError:
-                readings.append([])
-
-        return readings
+        similarEntries = self._dictionaryInst.getSimilarsForHeadword(headword,
+            orderBy=['Reading'])
+            #orderBy=['Reading', 'Headword']) # TODO doesn't work for CEDICT
+        return [e.Headword for e in similarEntries if e.Headword != headword]
 
     #{ Dictionary search
 
@@ -1301,9 +990,14 @@ class CharacterInfo:
         @todo Fix: Get proper normalisation or collation for reading column.
         """
         entriesSet = set()
-        for e in self._dictionaryInst.getForHeadword(searchString):
+        entries = [(e.Headword, e.Reading)
+            for e in self._dictionaryInst.getForHeadword(searchString)]
+        if not entries:
+            entries = [(searchString, None)]
+
+        for headword, reading in entries:
             entriesSet.update(self._dictionaryInst.getEntitiesForHeadword(
-                e.Headword, e.Reading, limit=limit))
+                headword, reading, limit=limit))
         if limit:
             return list(entriesSet)[:limit]
         else:

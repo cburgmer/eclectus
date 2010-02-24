@@ -34,7 +34,8 @@ class HtmlView:
         'zh-cmn-Hans': ['getCEDICTLink', 'getHanDeDictLink', 'getDictCNLink'],
         'ja': [],
         'ko': [],
-        'zh-yue': ['getCantoDictLink', 'getEduTwLink'],
+        'zh-yue-Hant': ['getCantoDictLink', 'getEduTwLink'],
+        'zh-yue-Hans': ['getCantoDictLink', 'getEduTwLink'],
         'ja': ['getWWWJDICLink'],
         }
     """Links to websites for a given character string."""
@@ -45,7 +46,8 @@ class HtmlView:
     COMMONS_STROKE_ORDER_FALLBACK = {'zh-cmn-Hant': ['zh-cmn-Hans'],
         'ja': ['zh-cmn-Hant', 'zh-cmn-Hans'],
         'ko': ['zh-cmn-Hans'],
-        'zh-yue': ['zh-cmn-Hans'],
+        'zh-yue-Hant': ['zh-cmn-Hans'],
+        'zh-yue-Hans': ['zh-cmn-Hant'],
         'zh-cmn-Hans': ['zh-cmn-Hant']}
     """
     Fallback for Wikimedia Commons stroke order images for cases where default
@@ -53,7 +55,7 @@ class HtmlView:
     """
 
     COMMONS_STROKE_ORDER_PREFIX = {'zh-cmn-Hans': '', 'zh-cmn-Hant': 't',
-        'zh-yue': 't', 'ja': 'j', 'ko': 't'}
+        'zh-yue-Hant': 't', 'zh-yue-Hans': '', 'ja': 'j', 'ko': 't'}
     """Language dependant Wikimedia Commons stroke order image prefix."""
 
     METHODS_NEED_DICTIONARY = ['getVocabularySection',
@@ -460,13 +462,7 @@ class HtmlView:
     # FUNCTIONS BASED ON DATABASE
 
     def getVariantSection(self, inputString):
-        if not self.charInfo.dictionary:
-            if len(inputString) != 1:
-                return ''
-            else:
-                variants = self.charInfo.getCharacterVariants(inputString) # TODO
-        else:
-            variants = self.charInfo.getHeadwordVariants(inputString)
+        variants = self.charInfo.getHeadwordVariants(inputString)
 
         variantLinks = []
         for variant in variants:
@@ -489,13 +485,7 @@ class HtmlView:
 
     def getSimilarsSection(self, inputString):
         """Returns a section of headwords with similar shape."""
-        if not self.charInfo.dictionary:
-            if len(inputString) != 1:
-                return ''
-            else:
-                similars = self.charInfo.getCharacterSimilars(inputString)
-        else:
-            similars = self.charInfo.getHeadwordSimilars(inputString)
+        similars = self.charInfo.getHeadwordSimilars(inputString)
 
         similarLinks = []
         for similar in similars:
@@ -549,41 +539,30 @@ class HtmlView:
         alternativeHeadwordIndex = {}
 
         # TODO index calculation is broken, e.g. 说
-        if self.charInfo.dictionary:
-            dictResult = self.charInfo.searchDictionaryExactHeadword(
-                inputString)
+        dictResult = self.charInfo.searchDictionaryExactHeadword(
+            inputString)
 
-            for idx, entry in enumerate(dictResult):
-                _, charStringAlt, reading, translation = entry
+        for idx, entry in enumerate(dictResult):
+            _, charStringAlt, reading, translation = entry
 
-                # get unique sorted readings
-                if reading not in readings:
-                    readings.append(reading)
+            # get unique sorted readings
+            if reading not in readings:
+                readings.append(reading)
 
-                # save translation, take care of double entries
-                if reading not in translations:
-                    translations[reading] = []
-                    translationIndex[reading] = idx
-                if translation not in translations[reading]:
-                    translations[reading].append(translation)
+            # save translation, take care of double entries
+            if reading not in translations:
+                translations[reading] = []
+                translationIndex[reading] = idx
+            if translation not in translations[reading]:
+                translations[reading].append(translation)
 
-                # save alternative headword, save link to translation
-                if charStringAlt not in alternativeHeadwords:
-                    alternativeHeadwords.append(charStringAlt)
-                    alternativeHeadwordIndex[charStringAlt] = []
-                # save link to translation
-                alternativeHeadwordIndex[charStringAlt].append(
-                    translations[reading].index(translation))
-
-        if len(inputString) == 1 \
-            and (not self.charInfo.dictionary \
-                or self.useExtraReadingInformation):
-            characterReadings \
-                = self.charInfo.getReadingForCharacter(inputString)
-            otherPronunciations = list(set(characterReadings) - set(readings))
-            otherPronunciations.sort()
-        else:
-            otherPronunciations = []
+            # save alternative headword, save link to translation
+            if charStringAlt not in alternativeHeadwords:
+                alternativeHeadwords.append(charStringAlt)
+                alternativeHeadwordIndex[charStringAlt] = []
+            # save link to translation
+            alternativeHeadwordIndex[charStringAlt].append(
+                translations[reading].index(translation))
 
         htmlList = []
         # show alternative headword when a) several different ones exist,
@@ -650,40 +629,9 @@ class HtmlView:
                             + '</tr>')
 
             htmlList.append('</table>')
-        elif self.charInfo.dictionary:
+        else:
             htmlList.append('<span class="meta">%s</span>' \
                 % gettext('No dictionary entries found'))
-
-        # show pronunciations not included in dictionary
-        if otherPronunciations:
-            pronunciationEntries = []
-            for reading in otherPronunciations:
-                # get audio if available
-                filePath, audioHtml = getAudio(reading)
-
-                pronunciationEntries.append(
-                    '<a class="reading" href="#lookup(%s)">%s</a>' \
-                        % (util.encodeBase64(reading),
-                            self._getReadingRepresentation(reading,
-                            forceBlocksOfFor=False)) \
-                    + audioHtml \
-                    + '<a class="addVocabulary" href="#addvocab(%s;%s;;%s)">' \
-                        % (util.encodeBase64(inputString),
-                            util.encodeBase64(reading),
-                            util.encodeBase64(filePath)) \
-                    + '</a>')
-            if readings:
-                label = gettext('Other pronunciations:')
-            else:
-                label = gettext('Pronunciations:')
-            htmlList.append('<p>' \
-                + '<span class="meta">%s</span> ' % label \
-                + '<span class="reading">%s</span>' \
-                    % ', '.join(pronunciationEntries) \
-                + '</p>')
-        elif not self.charInfo.dictionary:
-            htmlList.append('<span class="meta">%s</span>' \
-                % gettext('No entries found'))
 
         return '\n'.join(htmlList)
 
@@ -707,44 +655,21 @@ class HtmlView:
                 return a - b
 
         htmlList = []
-        if self.charInfo.dictionary:
-            if dictResult:
-                dictResult.sort(sortDictionaryResults)
+        if dictResult:
+            dictResult.sort(sortDictionaryResults)
 
-                htmlList.append('<table class="containedVocabulary">')
-                # don't display alternative if the charString is found
-                #   in the given string
-                showAlternative = lambda charString, _: \
-                        (inputString.find(charString) < 0)
-                htmlList.append(self._getVocabularyTable(dictResult,
-                    useAltFunc=showAlternative, smallSpacing=True))
-                htmlList.append('</table>')
+            htmlList.append('<table class="containedVocabulary">')
+            # don't display alternative if the charString is found
+            #   in the given string
+            showAlternative = lambda charString, _: \
+                    (inputString.find(charString) < 0)
+            htmlList.append(self._getVocabularyTable(dictResult,
+                useAltFunc=showAlternative, smallSpacing=True))
+            htmlList.append('</table>')
 
-            else:
-                htmlList.append('<span class="meta">%s</span>' \
-                    % gettext('No entries found'))
         else:
-            characterWiseReading \
-                = self.charInfo.getReadingForCharString(inputString)
-            pronunciationEntries = []
-            for idx, readingList in enumerate(characterWiseReading):
-                if readingList:
-                    pronunciationEntries.append('<tr class="vocabularyEntry">' \
-                        + '<td class="character">' \
-                        + '<a class="character" href="#lookup(%s)">%s</a>' \
-                            % (util.encodeBase64(inputString[idx]),
-                                inputString[idx]) \
-                        + '</td>' \
-                        + '<td class="reading">%s</td>' \
-                            % ', '.join(readingList) \
-                        + '</tr>')
-            if pronunciationEntries:
-                htmlList.append('<table class="containedVocabulary">')
-                htmlList.extend(pronunciationEntries)
-                htmlList.append('</table>')
-            else:
-                htmlList.append('<span class="meta">%s</span>' \
-                    % gettext('No entries found'))
+            htmlList.append('<span class="meta">%s</span>' \
+                % gettext('No entries found'))
 
         return '\n'.join(htmlList)
 
@@ -753,11 +678,7 @@ class HtmlView:
         Gets a list of dictionary entries for characters of the given character
         string.
         """
-        if self.charInfo.dictionary:
-            dictResult = self.charInfo.searchDictionaryHeadwordEntities(
-                inputString)
-        else:
-            dictResult = []
+        dictResult = self.charInfo.searchDictionaryHeadwordEntities(inputString)
         return self._getContainedEntitiesSection(inputString, dictResult)
 
     def getHeadwordContainedVocabularySection(self, inputString):
@@ -765,11 +686,8 @@ class HtmlView:
         Gets a list of dictionary entries for substrings of the given character
         string.
         """
-        if self.charInfo.dictionary:
-            dictResult = self.charInfo.searchDictionaryHeadwordSubstrings(
-                inputString)
-        else:
-            dictResult = []
+        dictResult = self.charInfo.searchDictionaryHeadwordSubstrings(
+            inputString)
         return self._getContainedEntitiesSection(inputString, dictResult)
 
     def getVocabularySection(self, inputString):
@@ -851,9 +769,9 @@ class HtmlView:
     def _getDictionaryInfo(self, char, dictResult=None):
         readings = []
         translations = []
-        addReadings = dictResult == None
-        if not dictResult and self.charInfo.dictionary:
-            dictResult = self.charInfo.searchDictionaryExactHeadword(char)
+
+        dictResult = (dictResult
+            or self.charInfo.searchDictionaryExactHeadword(char))
 
         if dictResult:
             # separate readings from translation
@@ -863,12 +781,6 @@ class HtmlView:
                 if translation and translation not in translations:
                     translations.append(
                         self._getTranslationRepresentation(translation))
-
-        if (not self.charInfo.dictionary or self.useExtraReadingInformation) \
-            and addReadings:
-            for reading in self.charInfo.getReadingForCharacter(char):
-                if reading not in readings:
-                    readings.append(reading)
 
         return ' <span class="reading">%s</span>' % ', '.join(readings) \
             + ' <span class="translation">%s</span>' \
@@ -950,37 +862,18 @@ class HtmlView:
 
     def getCharacterWithSamePronunciationSection(self, inputString):
         """Gets a list of characters with the same pronunciation."""
-        if self.charInfo.dictionary:
-            dictResult = self.charInfo.searchDictionarySamePronunciationAs(
-                inputString)
+        dictResult = self.charInfo.searchDictionarySamePronunciationAs(
+            inputString)
 
-            # group by reading and character
-            charDict = {}
-            for char, charAlt, reading, translation in dictResult:
-                if reading not in charDict:
-                    charDict[reading] = {}
-                if char not in charDict[reading]:
-                    charDict[reading][char] = []
-                charDict[reading][char].append(
-                    (char, charAlt, reading, translation))
-
-        else:
-            charDict = {}
-
-        if not self.charInfo.dictionary or self.useExtraReadingInformation:
-            # augment with results from Unihan
-            for reading in self.charInfo.getReadingForCharacter(inputString):
-                charResults = self.charInfo.getCharactersForReading(reading)
-                chars = [char for char, _ in charResults if char != inputString]
-
-                if chars:
-                    # group by reading and character
-                    if reading not in charDict:
-                        charDict[reading] = {}
-                    for char in chars:
-                        if char not in charDict[reading]:
-                            charDict[reading][char] \
-                                = [(char, char, reading, None)]
+        # group by reading and character
+        charDict = {}
+        for char, charAlt, reading, translation in dictResult:
+            if reading not in charDict:
+                charDict[reading] = {}
+            if char not in charDict[reading]:
+                charDict[reading][char] = []
+            charDict[reading][char].append(
+                (char, charAlt, reading, translation))
 
         if charDict:
             html = ''
@@ -999,78 +892,12 @@ class HtmlView:
         else:
             return '<span class="meta">%s</span>' % gettext('No entries found')
 
-    def getCharacterPronunciationSearchSection(self, inputString):
-        """
-        Gets a list of vocabulary entries with readings similar to the given
-        one. This method should be used when no dictionary is available.
-        @todo: Warn when multiple entities given
-        """
-        def fillTable(chars):
-            # sort by unicode codepoint
-            chars.sort(cmp=lambda x, y: ord(list(x)[0])-ord(list(y)[0]))
-
-            for char, readingList in chars:
-                readingList = sorted(readingList)
-
-                htmlList.append('<tr class="vocabularyEntry">' \
-                    + '<td class="character">' \
-                    + '<a class="character" href="#lookup(%s)">%s</a>' \
-                        % (util.encodeBase64(char), char) \
-                    + '</td>' \
-                    + '<td class="reading">%s</td>' % ', '.join(readingList) \
-                    + '</tr>')
-
-        htmlList = []
-        htmlList.append('<table class="search">')
-
-        # exact matches
-        exactChars = self.charInfo.getCharactersForReading(inputString)
-        if exactChars:
-            fillTable(exactChars)
-
-        # similar matches
-        similarChars = self.charInfo.getCharactersForSimilarReading(inputString)
-        if similarChars:
-            htmlList.append('<tr><td colspan="2"><h3>%s</h3></td></tr>' \
-                % gettext('Similar pronunciations'))
-            fillTable(similarChars)
-
-        if not exactChars:
-            if not similarChars:
-                htmlList.append('<tr><td colspan="3">'\
-                    + '<span class="meta">%s</span>' \
-                        % gettext('No matches found') \
-                    + '</td></tr>')
-            else:
-                htmlList.insert(0, '<tr><td colspan="3">'\
-                    + '<span class="meta">%s</span>' \
-                        % gettext('No exact matches found') \
-                    + '</td></tr>')
-        htmlList.append('</table>')
-
-        return '\n'.join(htmlList)
-
     def getVocabularySearchSection(self, inputString):
         """
         Gets the search results for the given string including exact maches
         and a shortened list of similar results and results including the given
         string.
         """
-        def augmentResults(results, chars):
-            hasEntries = set()
-            for charString, charStringAlt, reading, _ in results:
-                hasEntries.add((charString, reading))
-                hasEntries.add((charStringAlt, reading))
-
-            for char, readingList in chars:
-                for reading in readingList:
-                    if (char, reading) not in hasEntries:
-                        results.append((char, char, reading, ''))
-
-        # if no dictionary is available only search for reading
-        if not self.charInfo.dictionary:
-            return self.getCharacterPronunciationSearchSection(inputString)
-
         htmlList = []
         htmlList.append('<table class="search">')
 
@@ -1078,12 +905,6 @@ class HtmlView:
         exactDictResult, otherDictResult \
             = self.charInfo.searchDictionaryExactNContaining(inputString,
                 orderBy=['Weight']) # TODO split into two calls
-
-        # augment with results from Unihan
-        if self.useExtraReadingInformation:
-            chars = self.charInfo.getCharactersForReading(inputString)
-            if chars:
-                augmentResults(exactDictResult, chars)
 
         if exactDictResult:
             htmlList.append('<tr><td colspan="3"><h3>%s</h3></td></tr>' \
@@ -1098,12 +919,6 @@ class HtmlView:
         # similar pronunciation
         similarDictResult = self.charInfo.searchDictionarySimilarPronunciation(
             inputString, orderBy=['Weight'], limit=5)
-
-        # augment with results from Unihan
-        if self.useExtraReadingInformation and len(similarDictResult) < 5:
-            chars = self.charInfo.getCharactersForSimilarReading(inputString)
-            if chars:
-                augmentResults(similarDictResult, chars)
 
         if similarDictResult:
             htmlList.append('<tr><td colspan="3"><h3>%s</h3></td></tr>' \
@@ -1187,17 +1002,6 @@ class HtmlView:
         Gets a list of vocabulary entries with pronunciation similar to the
         given string.
         """
-        def augmentResults(results, chars):
-            hasEntries = set()
-            for charString, charStringAlt, reading, _ in results:
-                hasEntries.add((charString, reading))
-                hasEntries.add((charStringAlt, reading))
-
-            for char, readingList in chars:
-                for reading in readingList:
-                    if (char, reading) not in hasEntries:
-                        results.append((char, char, reading, ''))
-
         if not self.charInfo.dictionary:
             return ""
 
@@ -1205,12 +1009,6 @@ class HtmlView:
 
         dictResult = self.charInfo.searchDictionarySimilarPronunciation(
             inputString)
-
-        # augment with results from Unihan
-        if self.useExtraReadingInformation:
-            chars = self.charInfo.getCharactersForSimilarReading(inputString)
-            if chars:
-                augmentResults(similarDictResult, chars)
 
         if dictResult:
             htmlList.append('<table class="similarVocabulary">')

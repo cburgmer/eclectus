@@ -73,6 +73,7 @@ import eclectusqt
 from libeclectus import characterinfo
 from libeclectus import htmlview
 from libeclectus.util import getCJKScriptClass
+from libeclectus.dictionary import getDictionaryLanguage
 
 doDebug = 1
 
@@ -85,7 +86,8 @@ class MainWindow(KXmlGuiWindow):
 
     LANGUAGE_NAMES = {'zh-cmn-Hant': ki18n('Mandarin (Traditional)'),
         'zh-cmn-Hans': ki18n('Mandarin (Simplified)'),
-        'zh-yue': ki18n('Cantonese'), 'ko': ki18n('Korean'),
+        'zh-yue-Hant': ki18n('Cantonese (Traditional)'),
+        'zh-yue-Hans': ki18n('Cantonese (Simplified)'), 'ko': ki18n('Korean'),
         'ja': ki18n('Japanese')}
 
     EXT_DICTIONARY_NAMES = {
@@ -571,7 +573,7 @@ class MainWindow(KXmlGuiWindow):
         self.dictionaryList = []
         currentIndex = None
         for dictionary in dictionaries:
-            lang = characterinfo.CharacterInfo.DICTIONARY_LANG[dictionary]
+            lang = getDictionaryLanguage(dictionary)
             for language in languages:
                 if language.startswith(lang):
                     seenLanguages.add(language)
@@ -583,16 +585,8 @@ class MainWindow(KXmlGuiWindow):
                         name = self.EXT_DICTIONARY_NAMES[
                             (language, dictionary)].toString()
                     else:
-                        name = self.LANGUAGE_NAMES[language].toString() + name
+                        name = self.LANGUAGE_NAMES[language].toString()
                     self.dictionaryList.append((name, language, dictionary))
-
-        # add languages without dictionaries
-        for language in languages:
-            if language not in seenLanguages:
-                if currentLanguage == language:
-                    currentIndex = len(self.dictionaryList)
-                self.dictionaryList.append(
-                    (self.LANGUAGE_NAMES[language].toString(), language, None))
 
         self.dictChooserAction.setItems(
             [name for name, _, _ in self.dictionaryList])
@@ -619,15 +613,17 @@ class MainWindow(KXmlGuiWindow):
         # update readings
         charInfo = self.renderThread.getObjectInstance(
             characterinfo.CharacterInfo)
-        charDomains = charInfo.getAvailableCharacterDomains()
+        charDomains = charInfo.getCompatibleCharacterDomains()
 
         charDomainStrings = []
+        charDomainsSorted = []
         for charDomain, string in self.CHARACTER_DOMAINS:
             if charDomain in charDomains:
                 charDomainStrings.append(string.toString())
+                charDomainsSorted.append(charDomain)
 
         self.charDomainChooserAction.setItems(charDomainStrings)
-        currentIndex = charDomains.index(charInfo.characterDomain)
+        currentIndex = charDomainsSorted.index(charInfo.characterDomain)
         self.charDomainChooserAction.setCurrentItem(currentIndex)
 
     def _reloadObjects(self, **kwargs):
@@ -749,6 +745,7 @@ class MainWindow(KXmlGuiWindow):
         if classObject == characterinfo.CharacterInfo:
             self.updateDictionarySelector()
             self.updateReadingSelector()
+            self.updateCharDomainSelector()
 
     def queueEmpty(self):
         QApplication.restoreOverrideCursor()

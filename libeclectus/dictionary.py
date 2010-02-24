@@ -4,8 +4,11 @@
 High level dictionary access.
 """
 __all__ = [
+    "DICTIONARY_LANG", "DICTIONARY_TRANSLATION_LANG",
+    "LANGUAGE_COMPATIBLE_MAPPINGS",
     # access methods
     "getDictionaryClasses", "getDictionaryClass", "getDictionary",
+    "getDictionaryClassForLang", "getDictionaryForLang",
     # dictionaries
     "ExtendedEDICT", "ExtendedCEDICTGR", "ExtendedCEDICT", "ExtendedHanDeDict",
     "ExtendedCFDICT"]
@@ -18,13 +21,35 @@ from sqlalchemy import select
 from sqlalchemy.sql import and_, or_, func
 
 from cjklib.dictionary import EDICT, CEDICT, CEDICTGR, HanDeDict, CFDICT
-from cjklib.dictionary import search, entry
+from cjklib.dictionary import search, format, entry
 from cjklib.reading import ReadingFactory
-from cjklib.characterlookup import CharacterLookup
 from cjklib import exception
 from cjklib.util import cross
+from cjklib.dbconnector import getDBConnector
 
+from libeclectus.chardb import CharacterDB
 from libeclectus import util
+
+DICTIONARY_LANG = {'HanDeDict': 'zh-cmn', 'CFDICT': 'zh-cmn',
+    'CEDICT': 'zh-cmn', 'CEDICTGR': 'zh-cmn-Hant', 'EDICT': 'ja'}
+"""Dictionaries to (generic) CJK language mapping."""
+
+DICTIONARY_DEFAULT_LANG = {'HanDeDict': 'zh-cmn-Hans', 'CFDICT': 'zh-cmn-Hans',
+    'CEDICT': 'zh-cmn-Hans', 'CEDICTGR': 'zh-cmn-Hant', 'EDICT': 'ja'}
+"""Dictionaries to default CJK language mapping."""
+
+DICTIONARY_TRANSLATION_LANG = {'HanDeDict': 'de', 'CFDICT': 'fr',
+    'CEDICT': 'en', 'CEDICTGR': 'en', 'EDICT': 'en'}
+"""Dictionaries to translation language mapping."""
+
+LANGUAGE_COMPATIBLE_MAPPINGS = {
+    'zh-cmn-Hant': ['Pinyin', 'WadeGiles', 'MandarinIPA'],
+    'zh-cmn-Hans': ['Pinyin', 'WadeGiles', 'MandarinIPA'],
+    'zh-yue-Hant': ['Jyutping', 'CantoneseYale'],
+    'zh-yue-Hans': ['Jyutping', 'CantoneseYale'],
+    'ko': ['Hangul'],
+    'ja': ['Kana']}
+"""Compatible reading mappings per language."""
 
 def getDictionaryClasses():
     """
@@ -38,8 +63,50 @@ def getDictionaryClasses():
     return set([clss \
         for clss in dictionaryModule.dictionary.__dict__.values() \
         if type(clss) == types.TypeType \
-        and issubclass(clss, ExtendedDictionarySupport) \
+        and issubclass(clss, _ExtendedDictionarySupport) \
         and hasattr(clss, 'PROVIDES') and clss.PROVIDES])
+
+def getAvailableDictionaryNames(dbConnectInst=None, includePseudo=True):
+    """
+    Returns a list of available dictionary names for the given database
+    connection.
+
+    @type dbConnectInst: instance
+    @param dbConnectInst: optional instance of a L{DatabaseConnector}
+    @type includePseudo: bool
+    @param includePseudo: if C{True} pseudo dictionaries will be included in
+        list
+    @rtype: list of class
+    @return: list of dictionary class objects
+    """
+    global DICTIONARY_LANG
+    dbConnectInst = dbConnectInst or getDBConnector()
+    available = []
+    languages = []
+    for dictionaryClass in getDictionaryClasses():
+        if dictionaryClass.available(dbConnectInst):
+            available.append(dictionaryClass.PROVIDES)
+            lang = DICTIONARY_LANG.get(dictionaryClass.PROVIDES, None)
+            if lang:
+                languages.append(lang)
+
+    if includePseudo:
+        for lang in PseudoDictionary.SUPPORTED_LANG:
+            for generalLang in languages:
+                if lang.startswith(generalLang):
+                    break
+            else:
+                available.append('PSEUDO_%s' % lang)
+
+    return available
+
+def getDictionaryLanguage(dictionaryName):
+    global DICTIONARY_LANG
+    if dictionaryName.startswith('PSEUDO_'):
+        language = dictionaryName[7:]
+    else:
+        language = DICTIONARY_LANG[dictionaryName]
+    return language
 
 _dictionaryMap = None
 def getDictionaryClass(dictionaryName):
@@ -56,22 +123,165 @@ def getDictionaryClass(dictionaryName):
         _dictionaryMap = dict([(dictCls.PROVIDES, dictCls)
             for dictCls in getDictionaryClasses()])
 
-    if dictionaryName not in _dictionaryMap:
+    if dictionaryName.startswith('PSEUDO_'):
+        raise ValueError('Pseudo dictionaries not supported')
+    elif dictionaryName not in _dictionaryMap:
         raise ValueError('Not a supported dictionary')
     return _dictionaryMap[dictionaryName]
 
-def getDictionary(dictionaryName, **options):
+def getDictionary(dictionaryName, dbConnectInst=None, **options):
     """
-    Get a dictionary instance by dictionary name.
+    Get a dictionary instance by dictionary name. Returns C{None} if the
+    dictionary is not available.
 
     @type dictionaryName: str
     @param dictionaryName: dictionary name
     @rtype: type
     @return: dictionary instance
     """
-    dictCls = getDictionaryClass(dictionaryName)
-    return dictCls(**options)
+    dbConnectInst = dbConnectInst or getDBConnector()
+    if dictionaryName.startswith('PSEUDO_'):
+        language = dictionaryName[7:]
+        if 'language' in options:
+            if language != options['language']:
+                raise ValueError("Invalid language specified")
+            else:
+                del options['language']
+        return PseudoDictionary(language, dbConnectInst=dbConnectInst,
+            **options)
+    else:
+        dictCls = getDictionaryClass(dictionaryName)
+        if not dictCls.available(dbConnectInst):
+            return None
+        else:
+            return dictCls(dbConnectInst=dbConnectInst, **options)
 
+_languageMap = None
+def _getLanguageMap():
+    global _languageMap, DICTIONARY_LANG, DICTIONARY_DEFAULT_LANG
+    global DICTIONARY_TRANSLATION_LANG
+    if _languageMap is None:
+        _languageMap = {}
+        for dictName in DICTIONARY_LANG:
+            cjkLang = DICTIONARY_LANG[dictName]
+            translationLang = DICTIONARY_TRANSLATION_LANG.get(dictName, None)
+            if cjkLang not in _languageMap or translationLang == 'en':
+                _languageMap[cjkLang] = dictName
+            if translationLang:
+                _languageMap[(cjkLang, translationLang)] = dictName
+
+        for dictName in DICTIONARY_DEFAULT_LANG:
+            cjkLang = DICTIONARY_DEFAULT_LANG[dictName]
+            translationLang = DICTIONARY_TRANSLATION_LANG.get(dictName, None)
+            _languageMap[cjkLang] = dictName
+            _languageMap[(cjkLang, translationLang)] = dictName
+
+    return _languageMap
+
+def getDictionaryClassForLang(cjkLang, translationLang=None):
+    """
+    Get a dictionary class by dictionary name.
+
+    @type cjkLang: str
+    @param cjkLang: CJK language
+    @type translationLang: str
+    @param translationLang: translation language
+    @rtype: type
+    @return: dictionary class
+    """
+    languageMap = _getLanguageMap()
+
+    if translationLang:
+        key = (cjkLang, translationLang)
+    else:
+        key = cjkLang
+    if key not in languageMap:
+        raise ValueError('No dictionary for given language')
+    return getDictionaryClass(languageMap[key])
+
+def hasRealDictionaryForLang(cjkLang, translationLang=None):
+    """
+    Checks if a dictionary exists for the given language setting.
+
+    @type cjkLang: str
+    @param cjkLang: CJK language
+    @type translationLang: str
+    @param translationLang: translation language
+    @rtype: bool
+    @return: C{True} if dictionary exists
+    """
+    if translationLang:
+        key = (cjkLang, translationLang)
+    else:
+        key = cjkLang
+    languageMap = _getLanguageMap()
+    return key in languageMap and languageMap[key]
+
+def getDictionaryForLang(cjkLang, translationLang=None, **options):
+    """
+    Get a dictionary instance by dictionary name. If no dictionary is given for
+    both the cjk language and the translation language a dictionary is chosen
+    that matches the cjk language, and if none is found a pseudo dictionary is
+    returned.
+
+    @type cjkLang: str
+    @param cjkLang: CJK language
+    @type translationLang: str
+    @param translationLang: translation language
+    @rtype: type
+    @return: dictionary instance
+    """
+    if hasRealDictionaryForLang(cjkLang, translationLang):
+        dictCls = getDictionaryClassForLang(cjkLang, translationLang)
+        return dictCls(**options)
+    elif hasRealDictionaryForLang(cjkLang):
+        dictCls = getDictionaryClassForLang(cjkLang)
+        return dictCls(**options)
+    else:
+        return PseudoDictionary(cjkLang, **options)
+
+def getDefaultDictionary(translationLang=None, dbConnectInst=None, **options):
+    """
+    Tries to choose the best dictionary from a database for the given
+    translation language. This method can be used if no more information is
+    known about the user's preferences. Translation language can be derived
+    from the client's language setting.
+    """
+    def testAvailability(dictName):
+        if dictName in tested:
+            return False
+        else:
+            tested.append(dictName)
+            dictClss = getDictionaryClass(dictName)
+            return dictClss.available(dbConnectInst)
+
+    global DICTIONARY_TRANSLATION_LANG
+    tested = []
+    dbConnectInst = dbConnectInst or getDBConnector()
+
+    # choose CEDICT as default
+    if (not translationLang
+        or (translationLang == 'en' and testAvailability('CEDICT'))):
+        return getDictionary('CEDICT', dbConnectInst=dbConnectInst, **options)
+
+    # find dictionary matching the translation language
+    if translationLang:
+        for dictName, transLang in DICTIONARY_TRANSLATION_LANG.items():
+            if transLang == translationLang and testAvailability(dictName):
+                return getDictionary(dictName, dbConnectInst=dbConnectInst,
+                    **options)
+
+    # fallback, choose random
+    for dictName in sorted(DICTIONARY_TRANSLATION_LANG.keys()):
+        if testAvailability(dictName):
+            return getDictionary(dictName, dbConnectInst=dbConnectInst,
+                **options)
+
+    # no dictionary available, use pseudo
+    return PseudoDictionary('zh-cmn-Hans', dbConnectInst=dbConnectInst,
+        **options)
+
+#{ entry factories
 
 class HeadwordAlternative(entry.UnifiedHeadword):
     """
@@ -137,6 +347,7 @@ class CEDICTEntry(EDICTEntry):
         entry[0:2] = headwords
         return entry
 
+#{ search strategies
 
 class HeadwordEntity(search.Exact):
     """
@@ -192,7 +403,8 @@ class HeadwordEntityReading(HeadwordEntity):
     Exact search strategy class matching any single Chinese character from a
     headword with the reading as found in the headword.
     """
-    def __init__(self):
+    # TODO fix to cope with missing reading
+    def __init__(self, **options):
         self._getCharactersOptions = None
 
     def setDictionaryInstance(self, dictInstance):
@@ -218,12 +430,15 @@ class HeadwordEntityReading(HeadwordEntity):
                     targetOptions=self._dictInstance.READING_OPTIONS)
 
             except exception.DecompositionError:
+                self._pairs = None
                 raise exception.ConversionError(
                     "Decomposition failed for '%s'." % readingStr)
 
             entities = [entity for entity in convertedEntities if entity != ' ']
 
             if len(entities) != len(headwordStr):
+                print entities
+                print headwordStr
                 raise exception.ConversionError(
                     "Mismatch of headword/reading length: '%s' / '%s'"
                         % (headwordStr, "', '".join(entities)))
@@ -257,64 +472,6 @@ class _SimilarReadingWildcardBase(search._TonelessReadingWildcardBase):
     """
     Wildcard search base class for similar readings.
     """
-    AMBIGUOUS_INITIALS = {'Pinyin': {
-            'alveolar/retroflex': [('z', 'zh'), ('c', 'ch'), ('s', 'sh')],
-            'aspirated': [('b', 'p'), ('g', 'k'), ('d', 't'), ('j', 'q'),
-                ('z', 'c'), ('zh', 'ch')],
-            'other consonants': [('n', 'l'), ('l', 'r'), ('f', 'h'),
-                ('f', 'hu')]},
-        'CantoneseYale': {
-            'initial': [('n', 'l'), ('gwo', 'go'), ('kwo', 'ko'), ('ng', ''),
-                ('k', 'h')],
-            },
-        'Jyutping': {
-            'initial': [('n', 'l'), ('gwo', 'go'), ('kwo', 'ko'), ('ng', ''),
-                ('k', 'h')],
-            },
-        }
-    """Groups of similar sounding syllable initials."""
-
-    AMBIGUOUS_FINALS = {'Pinyin': {
-            'n/ng': [('an', 'ang'), ('uan', 'uang'), ('en', 'eng'),
-                ('in', 'ing')],
-            'vowel': [('eng', 'ong'), (u'ü', 'i'), (u'üe', 'ie'),
-                (u'üan', 'ian'), (u'ün', 'in'), ('uo', 'o'), ('ui', 'ei'),
-                ('i', 'u'), ('e', 'o')]},
-        'CantoneseYale': {
-            'final': [('k', 't'), ('ng', 'n')],
-            },
-        'Jyutping': {
-            'final': [('k', 't'), ('ng', 'n')],
-            },
-        }
-    """Groups of similar sounding syllable finals."""
-
-    @classmethod
-    def _getSimilarPlainEntities(cls, plainEntity, reading):
-        # TODO the following is not independent of reading and really slow
-        similar = [plainEntity]
-        if reading in cls.AMBIGUOUS_INITIALS:
-            for key in cls.AMBIGUOUS_INITIALS[reading]:
-                for tpl in cls.AMBIGUOUS_INITIALS[reading][key]:
-                    a, b = tpl
-                    if re.match(a + u'[aeiouü]', plainEntity):
-                        similar.append(b + plainEntity[len(a):])
-                    elif re.match(b + u'[aeiouü]', plainEntity):
-                        similar.append(a + plainEntity[len(b):])
-        # for all initial derived forms change final
-        if reading in cls.AMBIGUOUS_FINALS:
-            for modEntity in similar[:]:
-                for key in cls.AMBIGUOUS_FINALS[reading]:
-                    for tpl in cls.AMBIGUOUS_FINALS[reading][key]:
-                        a, b = tpl
-                        if re.search(u'[^aeiouü]' + a + '$',
-                            modEntity):
-                            similar.append(modEntity[:-len(a)] + b)
-                        elif re.search(u'[^aeiouü]' + b + '$',
-                            modEntity):
-                            similar.append(modEntity[:-len(b)] + a)
-        return similar
-
     def _getWildcardForms(self, searchStr, **options):
         if self._getWildcardFormsOptions != (searchStr, options):
             decompEntities = self._getPlainForms(searchStr, **options)
@@ -326,8 +483,8 @@ class _SimilarReadingWildcardBase(search._TonelessReadingWildcardBase):
                     if not isinstance(entity, basestring):
                         entity, plainEntity, _ = entity
                         if plainEntity is not None:
-                            similar = self._getSimilarPlainEntities(plainEntity,
-                                self._dictInstance.READING)
+                            similar = CharacterDB.getSimilarPlainEntities(
+                                plainEntity, self._dictInstance.READING)
                             entities = [self._createTonalEntityWildcard(e)
                                     for e in similar]
                             wildcardEntities.append(entities)
@@ -414,8 +571,8 @@ class _MixedSimilarReadingWildcardBase(
 
                         entity, plainEntity, _ = entity
                         if plainEntity is not None:
-                            similar = self._getSimilarPlainEntities(plainEntity,
-                                self._dictInstance.READING)
+                            similar = CharacterDB.getSimilarPlainEntities(
+                                plainEntity, self._dictInstance.READING)
                             entities = [self._createTonelessReadingWildcard(e)
                                     for e in similar]
                             searchEntities.append(entities)
@@ -515,39 +672,17 @@ class ExactMultiple(search.Exact):
 
 class HeadwordVariant(search.Exact):
     """Search strategy class matching variants of a given headword."""
+    def __init__(self, language, **options):
+        self.language = language
+
     def setDictionaryInstance(self, dictInstance):
         search.Exact.setDictionaryInstance(self, dictInstance)
-        self._characterLookup = CharacterLookup('T',
-            dbConnectInst=dictInstance.db)
-
-    def _getCharacterVariants(self, char):
-        """
-        Gets a list of variant forms of the given character.
-
-        @type headword: string
-        @param headword: headword
-        @rtype: list of strings
-        @return: headword variant forms
-        """
-        variants = set(char)
-        # get variants from Unihan
-        variants.update([c for c, _ in
-            self._characterLookup.getAllCharacterVariants(char)])
-        # get radical equivalent char
-        if self._characterLookup.isRadicalChar(char):
-            try:
-                equivChar = self._characterLookup\
-                    .getRadicalFormEquivalentCharacter(char)
-                variants.add(equivChar)
-            except cjklib.exception.UnsupportedError:
-                # pass if no equivalent char exists
-                pass
-
-        return variants
+        self._characterDB = CharacterDB(language=self.language,
+            characterDomain='Unicode', dbConnectInst=dictInstance.db)
 
     # TODO cached
     def _getPossibleHeadwordVariants(self, headwordStr):
-        singleCharacterVariants = [self._getCharacterVariants(char) \
+        singleCharacterVariants = [self._characterDB.getCharacterVariants(char)
             for char in headwordStr]
 
         variants = set(map(''.join, cross(*singleCharacterVariants)))
@@ -555,14 +690,50 @@ class HeadwordVariant(search.Exact):
         return variants
 
     def getWhereClause(self, column, headwordStr):
-        return column.in_(self._getPossibleHeadwordVariants(headwordStr))
+        searchStrings = self._getPossibleHeadwordVariants(headwordStr)
+        if searchStrings:
+            return column.in_(searchStrings)
+        else:
+            return None
 
     def getMatchFunction(self, headwordStr):
         searchStrings = self._getPossibleHeadwordVariants(headwordStr)
         return lambda cell: cell in searchStrings
 
 
-class ExtendedDictionarySupport(object):
+class HeadwordSimilar(search.Exact):
+    """Search strategy class matching similar strings of a given headword."""
+    def __init__(self, language, **options):
+        self.language = language
+
+    def setDictionaryInstance(self, dictInstance):
+        search.Exact.setDictionaryInstance(self, dictInstance)
+        self._characterDB = CharacterDB(language=self.language,
+            characterDomain='Unicode', dbConnectInst=dictInstance.db)
+
+    # TODO cached
+    def _getPossibleHeadwordSimilars(self, headwordStr):
+        singleCharacterSimilars = [self._characterDB.getCharacterSimilars(char)
+            for char in headwordStr]
+
+        variants = set(map(''.join, cross(*singleCharacterSimilars)))
+        variants.remove(headwordStr)
+        return variants
+
+    def getWhereClause(self, column, headwordStr):
+        searchStrings = self._getPossibleHeadwordSimilars(headwordStr)
+        if searchStrings:
+            return column.in_(searchStrings)
+        else:
+            return None
+
+    def getMatchFunction(self, headwordStr):
+        searchStrings = self._getPossibleHeadwordSimilars(headwordStr)
+        return lambda cell: cell in searchStrings
+
+#{ dictionary classes
+
+class _ExtendedDictionarySupport(object):
     """
     Partial class that adds further searching capabilities to dictionaries:
         - Get all entries for single entities of a headword entry
@@ -571,20 +742,36 @@ class ExtendedDictionarySupport(object):
         - Search for similar pronunciations mixed with headword
         - Get a random entry
 
+    TODO
     Further features:
         - Unify entries with same headword
-    TODO
         - Split entries with different translation fields
     """
     def __init__(self, **options):
         """
-        Initialises the ExtendedDictionarySupport instance.
+        Initialises the _ExtendedDictionarySupport instance.
 
         @keyword headwordEntitiesSearchStrategy: headword entities search
             strategy instance
         @keyword headwordSubstringSearchStrategy: headword substring search
             strategy instance
         """
+        self.language = options.get('language',
+            DICTIONARY_DEFAULT_LANG[self.PROVIDES])
+
+        ignoreIllegalSettings = options.get('ignoreIllegalSettings', False)
+        reading = options.get('reading', None)
+        if (reading
+            and reading not in LANGUAGE_COMPATIBLE_MAPPINGS[self.language]):
+            if ignoreIllegalSettings:
+                reading = None
+            else:
+                raise ValueError("Illegal reading '%s' for language '%s'"
+                    % (reading, self.language))
+
+
+        self.reading = reading or self.READING
+
         if 'headwordEntitiesSearchStrategy' in options:
             self.headwordEntitiesSearchStrategy \
                 = options['headwordEntitiesSearchStrategy']
@@ -629,11 +816,21 @@ class ExtendedDictionarySupport(object):
             self.headwordVariantSearchStrategy \
                 = options['headwordVariantSearchStrategy']
         else:
-            self.headwordVariantSearchStrategy = HeadwordVariant()
+            self.headwordVariantSearchStrategy = HeadwordVariant(self.language)
             """Strategy for searching headword substrings."""
         if hasattr(self.headwordVariantSearchStrategy,
             'setDictionaryInstance'):
             self.headwordVariantSearchStrategy.setDictionaryInstance(self)
+
+        if 'headwordSimilarSearchStrategy' in options:
+            self.headwordSimilarSearchStrategy \
+                = options['headwordSimilarSearchStrategy']
+        else:
+            self.headwordSimilarSearchStrategy = HeadwordSimilar(self.language)
+            """Strategy for searching headword substrings."""
+        if hasattr(self.headwordSimilarSearchStrategy,
+            'setDictionaryInstance'):
+            self.headwordSimilarSearchStrategy.setDictionaryInstance(self)
 
         dictionaryTable = self.db.tables[self.DICTIONARY_TABLE]
         self._dictionaryPrefer = 'Weight' in dictionaryTable.columns
@@ -722,6 +919,8 @@ class ExtendedDictionarySupport(object):
 
     def getForSimilarReading(self, readingStr, limit=None, orderBy=None,
         **options):
+        if self.readingSimilarSearchStrategy is None:
+            return []
         # TODO raises conversion error
         clauses, filters = self._getSimilarReadingSearch(readingStr, **options)
 
@@ -734,6 +933,9 @@ class ExtendedDictionarySupport(object):
             = self.headwordVariantSearchStrategy.getWhereClause(
                 dictionaryTable.c.Headword, headwordStr)
 
+        if not headwordSubstringClause:
+            return None, None
+
         headwordSubstringMatchFunc \
             = self.headwordVariantSearchStrategy.getMatchFunction(headwordStr)
 
@@ -742,11 +944,37 @@ class ExtendedDictionarySupport(object):
 
     def getVariantsForHeadword(self, headwordStr, limit=None, orderBy=None,
         **options):
-        # TODO don't match "main" headword for given string
         clauses, filters = self._getHeadwordVariantSearch(headwordStr,
             **options)
+        if not clauses:
+            return []
+        else:
+            return self._search(or_(*clauses), filters, limit, orderBy)
 
-        return self._search(or_(*clauses), filters, limit, orderBy)
+    def _getHeadwordSimilarSearch(self, headwordStr, **options):
+        dictionaryTable = self.db.tables[self.DICTIONARY_TABLE]
+
+        headwordSubstringClause \
+            = self.headwordSimilarSearchStrategy.getWhereClause(
+                dictionaryTable.c.Headword, headwordStr)
+
+        if not headwordSubstringClause:
+            return None, None
+
+        headwordSubstringMatchFunc \
+            = self.headwordSimilarSearchStrategy.getMatchFunction(headwordStr)
+
+        return ([headwordSubstringClause],
+            [(['Headword'], headwordSubstringMatchFunc)])
+
+    def getSimilarsForHeadword(self, headwordStr, limit=None, orderBy=None,
+        **options):
+        clauses, filters = self._getHeadwordSimilarSearch(headwordStr,
+            **options)
+        if not clauses:
+            return []
+        else:
+            return self._search(or_(*clauses), filters, limit, orderBy)
 
     def getRandomEntry(self):
         # TODO add constraint that random entry needs to fulfill, e.g.
@@ -777,7 +1005,7 @@ class ExtendedDictionarySupport(object):
         return entries
 
 
-class ExtendedCEDICTStyleSupport(ExtendedDictionarySupport):
+class _ExtendedCEDICTStyleSupport(_ExtendedDictionarySupport):
     def __init__(self, **options):
         if 'readingSimilarSearchStrategy' not in options:
             options['readingSimilarSearchStrategy'] = SimilarWildcardReading()
@@ -786,7 +1014,7 @@ class ExtendedCEDICTStyleSupport(ExtendedDictionarySupport):
                 = MixedSimilarWildcardReading()
         if 'headwordEntitiesSearchStrategy' not in options:
             options['headwordEntitiesSearchStrategy'] = HeadwordEntityReading()
-        ExtendedDictionarySupport.__init__(self, **options)
+        _ExtendedDictionarySupport.__init__(self, **options)
 
     def _getHeadwordEntitiesSearch(self, headwordStr, readingStr, **options):
         dictionaryTable = self.db.tables[self.DICTIONARY_TABLE]
@@ -898,6 +1126,26 @@ class ExtendedCEDICTStyleSupport(ExtendedDictionarySupport):
 
         return clauses, filters
 
+    def _getHeadwordSimilarSearch(self, headwordStr, **options):
+        dictionaryTable = self.db.tables[self.DICTIONARY_TABLE]
+
+        clauses = []
+        filters = []
+        if self.headword != 't':
+            clauses.append(self.headwordSimilarSearchStrategy.getWhereClause(
+                dictionaryTable.c.HeadwordSimplified, headwordStr))
+            filters.append((['HeadwordSimplified'],
+                self.headwordSimilarSearchStrategy.getMatchFunction(
+                    headwordStr)))
+        if self.headword != 's':
+            clauses.append(self.headwordSimilarSearchStrategy.getWhereClause(
+                dictionaryTable.c.HeadwordTraditional, headwordStr))
+            filters.append((['HeadwordTraditional'],
+                self.headwordSimilarSearchStrategy.getMatchFunction(
+                    headwordStr)))
+
+        return clauses, filters
+
 
 class _EDICTDictionaryDefaults(object):
     DEFAULT_SEARCH_STRATEGIES = {
@@ -917,12 +1165,12 @@ class _EDICTDictionaryDefaults(object):
                     multipleCharacters='*')
 
 
-class ExtendedEDICT(_EDICTDictionaryDefaults, EDICT, ExtendedDictionarySupport):
+class ExtendedEDICT(_EDICTDictionaryDefaults, EDICT, _ExtendedDictionarySupport):
     def __init__(self, **options):
         self._setDefaults(options)
         options['entryFactory'] = EDICTEntry() # TODO
         EDICT.__init__(self, **options)
-        ExtendedDictionarySupport.__init__(self, **options)
+        _ExtendedDictionarySupport.__init__(self, **options)
 
     def _search(self, whereClause, filters, limit, orderBy):
         self._checkOrderByWeight(orderBy)
@@ -930,16 +1178,19 @@ class ExtendedEDICT(_EDICTDictionaryDefaults, EDICT, ExtendedDictionarySupport):
 
 
 class ExtendedCEDICTGR(_EDICTDictionaryDefaults, CEDICTGR,
-    ExtendedDictionarySupport):
+    _ExtendedDictionarySupport):
     # TODO similar reading support for CEDICTGR
     def __init__(self, **options):
-        self._setDefaults(options, {
+        defaults = {
+            'readingSearchStrategy': search.SimpleWildcardReading,
             'translationSearchStrategy': search.CEDICTWildcardTranslation,
             'headwordEntitiesSearchStrategy': HeadwordEntityReading
-            })
+            }
+        self._setDefaults(options, defaults)
+
         options['entryFactory'] = EDICTEntry() # TODO
         CEDICTGR.__init__(self, **options)
-        ExtendedDictionarySupport.__init__(self, **options)
+        _ExtendedDictionarySupport.__init__(self, **options)
 
     def _search(self, whereClause, filters, limit, orderBy):
         self._checkOrderByWeight(orderBy)
@@ -963,18 +1214,30 @@ class _CEDICTDictionaryDefaults(_EDICTDictionaryDefaults):
             if strategy not in options:
                 options[strategy] = defaults[strategy](singleCharacter='?',
                     multipleCharacters='*')
+
         if 'entryFactory' not in options:
             #options['entryFactory'] = HeadwordAlternative()
             options['entryFactory'] = CEDICTEntry()
 
+        reading = options.get('reading', cls.READING)
+
+        columnFormatStrategies = options.get('columnFormatStrategies', {})
+        if 'Reading' not in columnFormatStrategies:
+            columnFormatStrategies['Reading'] = format.ReadingConversion(
+                reading)
+            options['columnFormatStrategies'] = columnFormatStrategies
+
 
 class ExtendedCEDICT(_CEDICTDictionaryDefaults, CEDICT,
-    ExtendedCEDICTStyleSupport):
+    _ExtendedCEDICTStyleSupport):
     def __init__(self, **options):
-        self._setDefaults(options,
-            {'translationSearchStrategy': search.CEDICTWildcardTranslation})
+        defaults = {
+            'translationSearchStrategy': search.CEDICTWildcardTranslation
+            }
+        self._setDefaults(options, defaults)
+
         CEDICT.__init__(self, **options)
-        ExtendedCEDICTStyleSupport.__init__(self, **options)
+        _ExtendedCEDICTStyleSupport.__init__(self, **options)
 
     def _search(self, whereClause, filters, limit, orderBy):
         self._checkOrderByWeight(orderBy)
@@ -982,12 +1245,15 @@ class ExtendedCEDICT(_CEDICTDictionaryDefaults, CEDICT,
 
 
 class ExtendedHanDeDict(_CEDICTDictionaryDefaults, HanDeDict,
-    ExtendedCEDICTStyleSupport):
+    _ExtendedCEDICTStyleSupport):
     def __init__(self, **options):
-        self._setDefaults(options,
-            {'translationSearchStrategy': search.HanDeDictWildcardTranslation})
+        defaults = {
+            'translationSearchStrategy': search.HanDeDictWildcardTranslation
+            }
+        self._setDefaults(options, defaults)
+
         HanDeDict.__init__(self, **options)
-        ExtendedCEDICTStyleSupport.__init__(self, **options)
+        _ExtendedCEDICTStyleSupport.__init__(self, **options)
 
     def _search(self, whereClause, filters, limit, orderBy):
         self._checkOrderByWeight(orderBy)
@@ -995,13 +1261,259 @@ class ExtendedHanDeDict(_CEDICTDictionaryDefaults, HanDeDict,
 
 
 class ExtendedCFDICT(_CEDICTDictionaryDefaults, CFDICT,
-    ExtendedCEDICTStyleSupport):
+    _ExtendedCEDICTStyleSupport):
     def __init__(self, **options):
-        self._setDefaults(options,
-            {'translationSearchStrategy': search.HanDeDictWildcardTranslation})
+        defaults = {
+            'translationSearchStrategy': search.HanDeDictWildcardTranslation
+            }
+        self._setDefaults(options, defaults)
+
         CFDICT.__init__(self, **options)
-        ExtendedCEDICTStyleSupport.__init__(self, **options)
+        _ExtendedCEDICTStyleSupport.__init__(self, **options)
 
     def _search(self, whereClause, filters, limit, orderBy):
         self._checkOrderByWeight(orderBy)
         return CFDICT._search(self, whereClause, filters, limit, orderBy)
+
+
+class PseudoDictionary(object):
+    """
+    Provides a pseudo dictionary that offers only character lookup based on
+    character to reading mappings in the absence of real dictionary data.
+    """
+    # TODO implement limit= for all search routines
+    SUPPORTED_LANG = ['zh-cmn-Hans', 'zh-cmn-Hant', 'zh-yue-Hans',
+        'zh-yue-Hant', 'ko'] # , 'ja'
+    """List of supported CJK languages for pseudo dictionaries."""
+
+    LANGUAGE_LOCALE_MAP = {'zh-cmn-Hant': 'T', 'zh-cmn-Hans': 'C',
+        'zh-yue-Hant': 'T', 'zh-yue-Hans': 'S', 'ko': 'K'} #, 'ja': 'J'}
+    """Locale for language."""
+
+    LANGUAGE_DEFAULT_READING = {'zh-cmn-Hant': 'Pinyin',
+        'zh-cmn-Hans': 'Pinyin', 'zh-yue-Hant': 'Jyutping',
+        'zh-yue-Hans': 'Jyutping', 'ko': 'Hangul'} #, 'ja': 'Kana'}
+    """
+    Default reading for language, following default mappings in
+    cjklib.characterlookup.
+    """
+
+    # TODO
+    COLUMNS = ['Headword', 'HeadwordAlternative', 'Reading', 'Translation']
+    #COLUMNS = ['Headword', 'Reading']
+
+    def __init__(self, language, characterDomain=None, reading=None,
+        columnFormatStrategies=None, entryFactory=None, dbConnectInst=None,
+        ignoreIllegalSettings=False):
+
+        if language not in self.SUPPORTED_LANG:
+            raise ValueError("Unknown language '%s'" % language)
+
+        self.language = language
+        self.PROVIDES = 'PSEUDO_%s' % self.language
+        self.locale = self.LANGUAGE_LOCALE_MAP[language]
+
+        if (reading
+            and reading not in LANGUAGE_COMPATIBLE_MAPPINGS[self.language]):
+            if ignoreIllegalSettings:
+                reading = None
+            else:
+                raise ValueError("Illegal reading '%s' for language '%s'"
+                    % (reading, self.language))
+
+        self.reading = reading or self.LANGUAGE_DEFAULT_READING[language]
+        # compatibility with EDICT style dictionaries
+        self.READING = self.reading
+        self.READING_OPTIONS = {}
+
+        self.db = dbConnectInst or getDBConnector()
+        self._readingFactory = ReadingFactory(dbConnectInst=self.db)
+        self._characterDB = CharacterDB(language=self.language,
+            characterDomain=characterDomain, dbConnectInst=self.db,
+            ignoreIllegalSettings=ignoreIllegalSettings)
+
+        # common dictionary settings
+        self.columnFormatStrategies = columnFormatStrategies or {}
+        for column in self.columnFormatStrategies.values():
+            if hasattr(column, 'setDictionaryInstance'):
+                column.setDictionaryInstance(self)
+
+        self.entryFactory = entryFactory or entry.NamedTuple()
+        if hasattr(self.entryFactory, 'setDictionaryInstance'):
+            self.entryFactory.setDictionaryInstance(self)
+
+    def _format(self, results):
+        # format readings and translations
+        for column, formatStrategy in self.columnFormatStrategies.items():
+            columnIdx = self.COLUMNS.index(column)
+            for idx in range(len(results)):
+                rowList = list(results[idx])
+                rowList[columnIdx] = formatStrategy.format(rowList[columnIdx])
+                results[idx] = tuple(rowList)
+
+        # format results
+        # TODO
+        entries = self.entryFactory.getEntries([(h, h, r, '') for h, r in results])
+        #entries = self.entryFactory.getEntries(results)
+
+        return entries
+
+    def getForHeadword(self, headwordStr, **options):
+        if len(headwordStr) > 1:
+            return []
+
+        char = headwordStr
+        try:
+            readings = self._characterDB.getReadingForCharacter(char,
+                self.reading)
+        except (exception.ConversionError, exception.UnsupportedError):
+            readings = []
+
+        return self._format([(char, reading) for reading in readings])
+
+    def _exactReading(self, readingStr, **options):
+        if self._readingFactory.isReadingEntity(readingStr, self.reading,
+            **options):
+            if self._readingFactory.isReadingConversionSupported(self.reading,
+                self.reading):
+                try:
+                    convertedEntity = self._readingFactory.convertEntities(
+                        [readingStr], self.reading, self.reading,
+                        sourceOptions=options)[0]
+                    return [convertedEntity]
+                except exception.ConversionError:
+                    return [readingStr]
+            else:
+                return [readingStr]
+
+        if self._readingFactory.isReadingOperationSupported('getTonalEntity',
+            self.reading):
+            if not self._readingFactory.isPlainReadingEntity(readingStr,
+                self.reading, **options):
+                # raise Exception?
+                return []
+
+            tonalEntities = []
+            for tone in self._readingFactory.getTones(self.reading, **options):
+                try:
+                    tonalEntities.append(
+                        self._readingFactory.getTonalEntity(readingStr, tone,
+                            self.reading, **options))
+                except (exception.InvalidEntityError,
+                    exception.UnsupportedError):
+                    pass
+
+            return [self._readingFactory.convertEntities([e], self.reading,
+                    self.reading, sourceOptions=options)[0]
+                    for e in tonalEntities]
+
+        return []
+
+    def getForReading(self, readingStr, **options):
+        entries = []
+
+        for readingEntity in self._exactReading(readingStr, **options):
+            try:
+                chars = self._characterDB.getCharactersForReading(
+                    readingEntity, self.reading)
+                entries.extend([(char, readingEntity) for char in chars])
+            except (ValueError, exception.ConversionError):
+                pass
+            except exception.UnsupportedError:
+                return []
+
+        return self._format(entries)
+
+    def getFor(self, searchStr, **options):
+        entries = set(self.getForReading(searchStr, **options))
+        if searchStr and util.getCJKScriptClass(searchStr[0]) == 'Han':
+            entries.update(self.getForHeadword(searchStr, **options))
+
+        return entries
+
+    def _similarReading(self, readingStr, **options):
+        entity = readingStr
+        if self._readingFactory.isReadingOperationSupported(
+            'splitEntityTone', self.reading):
+            try:
+                entity, _ = self._readingFactory.splitEntityTone(entity,
+                    self.reading)
+            except (exception.InvalidEntityError, exception.UnsupportedError):
+                pass
+
+        similar = CharacterDB.getSimilarPlainEntities(entity, self.reading)
+
+        if self._readingFactory.isReadingOperationSupported('getTonalEntity',
+            self.reading):
+            tonalEntities = []
+            for tone in self._readingFactory.getTones(self.reading, **options):
+                for similarEntity in similar:
+                    try:
+                        tonalEntities.append(
+                            self._readingFactory.getTonalEntity(similarEntity,
+                                tone, self.reading, **options))
+                    except (exception.InvalidEntityError,
+                        exception.UnsupportedError):
+                        pass
+            similar = tonalEntities
+
+        if self._readingFactory.isReadingConversionSupported(self.reading,
+            self.reading):
+            convertedSimilar = []
+            for e in similar:
+                try:
+                    convertedSimilar.append(
+                        self._readingFactory.convertEntities([e], self.reading,
+                            self.reading, sourceOptions=options)[0])
+                except exception.ConversionError:
+                    pass
+            return convertedSimilar
+        else:
+            return similar
+
+    def getForSimilarReading(self, readingStr, **options):
+        entries = []
+
+        for readingEntity in self._similarReading(readingStr, **options):
+            try:
+                chars = self._characterDB.getCharactersForReading(
+                    readingEntity, self.reading)
+                entries.extend([(char, readingEntity) for char in chars])
+            except (ValueError, exception.ConversionError):
+                pass
+            except exception.UnsupportedError:
+                return []
+
+        return self._format(entries)
+
+    def getEntitiesForHeadword(self, headwordStr, readingStr=None, **options):
+        entries = []
+        for char in headwordStr:
+            if util.getCJKScriptClass(char) != 'Han':
+                continue
+            try:
+                readings = self._characterDB.getReadingForCharacter(char,
+                    self.reading)
+            except (exception.ConversionError, exception.UnsupportedError):
+                readings = []
+            entries.extend([(char, reading) for reading in readings])
+
+        return self._format(entries)
+
+    def getSubstringsForHeadword(self, headwordStr, limit=None, orderBy=None):
+        return self.getSubstringsForHeadword(headwordStr, limit, orderBy)
+
+    def getVariantsForHeadword(self, headwordStr, **options):
+        # TODO remove radical forms
+        if len(headwordStr) != 1:
+            return []
+        else:
+            return self._format([(char, None) for char
+                in self._characterDB.getCharacterVariants(headwordStr)])
+
+    def getSimilarsForHeadword(self, headwordStr, **options):
+        if len(headwordStr) != 1:
+            return []
+        else:
+            return self._format([(char, None) for char
+                in self._characterDB.getCharacterSimilars(headwordStr)])

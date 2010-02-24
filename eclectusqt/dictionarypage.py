@@ -189,8 +189,10 @@ class DictionaryPage(QWebView):
         ('zh-cmn-Hant', 'WadeGiles'): [u'折衷鸚鵡', u'wu1lung2茶', u"tui4?ch'i3"],
         ('zh-cmn-Hans', 'MandarinIPA'): [u'折衷鹦鹉'],
         ('zh-cmn-Hant', 'MandarinIPA'): [u'折衷鸚鵡'],
-        ('zh-yue', 'CantoneseYale'): [u'龍', u'gwok'],
-        ('zh-yue', 'Jyutping'): [u'龍', u'gwok'],
+        ('zh-yue-Hans', 'CantoneseYale'): [u'龙', u'gwok'],
+        ('zh-yue-Hans', 'Jyutping'): [u'龙', u'gwok'],
+        ('zh-yue-Hant', 'CantoneseYale'): [u'龍', u'gwok'],
+        ('zh-yue-Hant', 'Jyutping'): [u'龍', u'gwok'],
         ('ko', 'Hangul'): [u'龍', u'국'],
         ('ja', 'Kana'): [u'東京', u'とうきょう']}
     """Examples for the help page."""
@@ -198,7 +200,7 @@ class DictionaryPage(QWebView):
     WELCOME_PAGE = 'about:help'
 
     WELCOME_TEXT = {'ja': u'ようこそ', 'ko': u'환영합니다', 'zh-cmn-Hans': u'欢迎',
-        'zh-cmn-Hant': u'歡迎', 'zh-yue': u'歡迎'}
+        'zh-cmn-Hant': u'歡迎', 'zh-yue-Hans': u'欢迎', 'zh-yue-Hant': u'歡迎'}
     """Welcome message on about:help page by language code."""
 
     POLLY_CHANGE_TEXT_JAVASCRIPT = """<script>
