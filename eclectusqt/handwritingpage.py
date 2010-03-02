@@ -32,7 +32,7 @@ from PyKDE4.kdecore import i18n
 from eclectusqt.forms import HandwritingPageUI
 from eclectusqt import util
 
-from libeclectus import characterinfo
+from libeclectus.chardb import CharacterDB
 from libeclectus.util import encodeBase64, decodeBase64
 
 tomoeDictionaryPath = "/usr/local/share/tomoe/recognizer/"
@@ -60,9 +60,11 @@ class HandwritingPage(QWidget, HandwritingPageUI.Ui_Form):
 
     def __init__(self, mainWindow, renderThread, pluginConfig=None):
         QWidget.__init__(self, mainWindow)
+        self.mainWindow = mainWindow
         self.renderThread = renderThread
         self.pluginConfig = pluginConfig
 
+        self.databaseUrl = None
         if self.pluginConfig:
             self.maximumSize = util.readConfigInt(self.pluginConfig,
                 "Handwriting maximum field size",
@@ -70,21 +72,27 @@ class HandwritingPage(QWidget, HandwritingPageUI.Ui_Form):
             self.maximumResults = util.readConfigInt(self.pluginConfig,
                 "Handwriting maximum results",
                 HandwritingPage.DEFAULT_MAXIMUM_RESULTS)
+            self.databaseUrl = util.readConfigString(self.pluginConfig,
+                "Update database url", None)
         else:
             self.maximumSize = HandwritingPage.DEFAULT_MAXIMUM_FIELD_SIZE
             self.maximumResults = HandwritingPage.DEFAULT_MAXIMUM_RESULTS
+
+        if not self.databaseUrl:
+            self.databaseUrl = unicode('sqlite:///'
+                + util.getLocalData('dictionaries.db'))
 
         # set up UI
         self.setupUi(self)
 
         # connect to main window
-        self.connect(mainWindow, SIGNAL("writeSettings()"),
+        self.connect(self.mainWindow, SIGNAL("settingsChanged()"),
+            self.slotSettingsChanged)
+        self.connect(self.mainWindow, SIGNAL("writeSettings()"),
             self.writeSettings)
 
         self.connect(self.renderThread, SIGNAL("jobFinished"),
             self.contentRendered)
-        self.connect(self.renderThread, SIGNAL("objectCreated"),
-            self.objectCreated)
 
         self.handwritingView.setMaximumSize(self.maximumSize)
 
@@ -105,12 +113,15 @@ class HandwritingPage(QWidget, HandwritingPageUI.Ui_Form):
         self.clearButton.setIcon(KIcon('edit-clear'))
         self.backButton.setIcon(KIcon('edit-undo'))
 
-        self.currentLanguage = None
+        self.language = None
+        self.characterDomain = None
         self.initialised = False
 
     def showEvent(self, event):
         if not self.initialised:
             self.initialised = True
+
+            self.slotSettingsChanged()
 
             if not self.handwritingView.recognizerAvailable():
                 self.handwritingResultView.setHtml(
@@ -141,26 +152,32 @@ class HandwritingPage(QWidget, HandwritingPageUI.Ui_Form):
             self.pluginConfig.writeEntry("Handwriting maximum results",
                 str(self.maximumResults))
 
-    def objectCreated(self, id, classObject):
+    def slotSettingsChanged(self):
         if not self.initialised:
             return
-        if classObject == characterinfo.CharacterInfo:
-            charInfo = self.renderThread.getObjectInstance(
-                characterinfo.CharacterInfo)
-            if not self.currentLanguage \
-                or self.currentLanguage != charInfo.language:
+
+        settings = self.mainWindow.settings()
+
+        language = settings.get('language', 'zh-cmn-Hans')
+        characterDomain = settings.get('characterDomain', 'Unicode')
+
+        if self.language != language or self.characterDomain != characterDomain:
+            self.renderThread.setCachedObject(CharacterDB,
+                databaseUrl=self.databaseUrl, language=language,
+                characterDomain=characterDomain)
+
+            if self.language != language:
                 self._setDictionary()
-            else:
+            if self.characterDomain != characterDomain:
                 self._setResultView()
+
+            self.language = language
+            self.characterDomain = characterDomain
 
     def _setDictionary(self):
         errorDisplayed = False
-        charInfo = self.renderThread.getObjectInstance(
-            characterinfo.CharacterInfo)
-        self.currentLanguage = charInfo.language
-
-        if self.currentLanguage in self.WRITING_MODELS:
-            settings = self.WRITING_MODELS[self.currentLanguage]
+        if self.language in self.WRITING_MODELS:
+            settings = self.WRITING_MODELS[self.language]
         else:
             # choose random language
             fallbackLanguage = sorted(self.WRITING_MODELS.keys())[0]
@@ -194,11 +211,11 @@ class HandwritingPage(QWidget, HandwritingPageUI.Ui_Form):
                 print "Warning: illegal return from recognizer: ", repr(weiredRes)
                 chars = [char for char in chars if len(char) == 1]
 
-            self.renderThread.enqueue(characterinfo.CharacterInfo,
-                'filterDomainCharacters', chars)
+            self.renderThread.enqueue(CharacterDB, 'filterDomainCharacters',
+                chars)
 
     def contentRendered(self, id, classObject, method, args, param, content):
-        if classObject == characterinfo.CharacterInfo:
+        if classObject == CharacterDB:
             if method == 'filterDomainCharacters':
                 chars = content
 

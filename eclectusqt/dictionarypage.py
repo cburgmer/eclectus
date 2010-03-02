@@ -38,14 +38,15 @@ except RuntimeError:
 from PyKDE4.kdeui import KIcon, KAction, KToggleAction, KToolBarPopupAction
 from PyKDE4.kdeui import KActionCollection, KStandardAction, KStandardShortcut
 from PyKDE4.kdeui import KStandardGuiItem, KMessageBox, KFind, KFindDialog
-from PyKDE4.kdeui import KMenu, KActionMenu
+from PyKDE4.kdeui import KMenu, KActionMenu, KSelectAction, KShortcut
 from PyKDE4.kdecore import ki18n, i18n
 
 from eclectusqt import util
 
-from libeclectus import characterinfo
-from libeclectus import htmlview
+from libeclectus.dictionaryview import DictionaryView
 from libeclectus.util import encodeBase64, decodeBase64, getCJKScriptClass
+from libeclectus.dictionary import (getDictionaryLanguage,
+    LANGUAGE_COMPATIBLE_MAPPINGS)
 
 class BrowsingHistory(QObject):
     """
@@ -122,6 +123,39 @@ class BrowsingHistory(QObject):
 
 
 class DictionaryPage(QWebView):
+    READING_NAMES = {'Pinyin': ki18n('Pinyin'),
+        'WadeGiles': ki18n('Wade-Giles'), 'MandarinIPA': ki18n('IPA'),
+        'GR': ki18n('Gwoyeu Romatzyh'), 'Jyutping': ki18n('Jyutping'),
+        'CantoneseYale': ki18n('Yale'), 'Hangul': ki18n('Hangul'),
+        'Kana': ki18n('Kana')}
+
+    LANGUAGE_NAMES = {'zh-cmn-Hant': ki18n('Mandarin (Traditional)'),
+        'zh-cmn-Hans': ki18n('Mandarin (Simplified)'),
+        'zh-yue-Hant': ki18n('Cantonese (Traditional)'),
+        'zh-yue-Hans': ki18n('Cantonese (Simplified)'), 'ko': ki18n('Korean'),
+        'ja': ki18n('Japanese')}
+
+    DICTIONARY_NAMES = {'CEDICT': ki18n('English-Chinese (CEDICT)'),
+        'CEDICTGR': ki18n('English-Chinese (CEDICT, GR version)'),
+        'HanDeDict': ki18n('German-Chinese (HanDeDict)'),
+        'CFDICT': ki18n('French-Chinese (CFDICT)'),
+        'EDICT': ki18n('English-Japanese (EDICT)')}
+
+    CHARACTER_DOMAINS = [
+        ('Unicode', ki18n('all characters')),
+        ('GB2312', ki18n(
+            'Simplified Chinese: 6763 characters from standard GB2312')),
+        ('BIG5', ki18n(
+            'Traditional Chinese: 13063 characters from standard BIG5')),
+        ('BIG5HKSCS', ki18n(
+            'Cantonese with traditional characters: 17575 characters from standard BIG5-HKSCS')),
+        ('JISX0208', ki18n(
+            'Japanese: 6356 characters from standard JIS X 0208')),
+        ('JISX0208_0213', ki18n(
+            'Japanese: 9748 characters from standards JIS X 0208/0213')),
+        ]
+    """Pretty print strings for character domains."""
+
     DEFAULT_HIDDEN_SECTIONS = ['getCharacterWithComponentSection',
         'getLinkSection']
     """Sections hidden by default."""
@@ -226,12 +260,19 @@ function _go() { }
         self.renderThread = renderThread
         self.pluginConfig = pluginConfig
 
+        self.initialised = False
+
+        dictionaryViewSettings = {}
         self.hiddenSections = set(self.DEFAULT_HIDDEN_SECTIONS)
         self.findHistory = []
         self.startPage = 'welcome'
         currentString = self.WELCOME_PAGE
 
         if self.pluginConfig:
+            dictionaryViewSettings = DictionaryView.readSettings(
+                dict([(unicode(key), unicode(value)) \
+                    for key, value in self.pluginConfig.entryMap().items()]))
+
             hiddenSections = util.readConfigString(self.pluginConfig,
                 "Dictionary hidden sections", None)
             if hiddenSections:
@@ -253,6 +294,24 @@ function _go() { }
             else:
                 currentString = self.WELCOME_PAGE
 
+            lastReadings = util.readConfigString(self.pluginConfig,
+                "Last readings", '').split(',')
+            self.lastReading = {}
+            for entry in lastReadings:
+                if not entry: continue
+                if entry.count(':') > 2:
+                    # compatibility to version 0.2beta
+                    _, entryDict, entryReading = entry.split(':', 2)
+                else:
+                    entryDict, entryReading = entry.split(':', 1)
+                self.lastReading[entryDict] = entryReading
+
+        if 'databaseUrl' not in dictionaryViewSettings:
+            dictionaryViewSettings['databaseUrl'] = unicode('sqlite:///'
+                + util.getLocalData('dictionaries.db'))
+
+        self._loadObjects(dictionaryViewSettings)
+
         self.miniMode = False
         self.sectionContentVisible \
             = self.DEFAULT_SECTION_CONTENT_VISIBILITY.copy()
@@ -273,11 +332,11 @@ function _go() { }
         # connect to main window
         self.connect(mainWindow, SIGNAL("writeSettings()"),
             self.writeSettings)
+        self.connect(mainWindow, SIGNAL("databaseChanged()"),
+            self._reloadObjects)
 
         self.connect(self.renderThread, SIGNAL("jobFinished"),
             self.contentRendered)
-        self.connect(self.renderThread, SIGNAL("objectCreated"),
-            self.objectCreated)
 
         # connect to the widgets
         self.connect(self.page(), SIGNAL("linkClicked(const QUrl &)"),
@@ -289,14 +348,29 @@ function _go() { }
 
         self.setupActions()
 
-        self.initialised = False
-
     def showEvent(self, event):
         if not self.initialised:
             self.initialised = True
             self.history.setCurrent(0)
 
         QWidget.showEvent(self, event)
+
+    def _loadObjects(self, dictionaryViewSettings):
+        self.renderThread.setCachedObject(DictionaryView,
+            **dictionaryViewSettings)
+
+        dictionaryView = self.renderThread.getObjectInstance(DictionaryView)
+        # get settings
+        for option in 'language', 'characterDomain', 'dictionary', 'reading':
+            setattr(self, option, getattr(dictionaryView, option))
+
+        self.emit(SIGNAL("settingsChanged()"))
+
+    def settings(self):
+        settings = {}
+        for attr in 'language', 'characterDomain', 'dictionary', 'reading':
+            settings[attr] = getattr(self, attr)
+        return settings
 
     def setupActions(self):
         # lookup clipboard action
@@ -309,6 +383,8 @@ function _go() { }
             self.slotLookupClipboard)
         self._lookupClipboardAction.setIcon(
             QIcon(util.getIcon('lookup-clipboard.png')))
+        self._lookupClipboardAction.setGlobalShortcut(
+            KShortcut(Qt.CTRL + Qt.ALT + Qt.Key_N))
 
         # lookup selection action
         self._lookupSelectionAction = KAction(i18n("Lookup &Selection"), self)
@@ -402,6 +478,36 @@ function _go() { }
         self._findPrevAction = KStandardAction.findPrev(self.slotFindPrev,
             self.actionCollection)
 
+        # dictionary chooser action
+        self._dictionaryChooserAction = KSelectAction(i18n("&Dictionary"), self)
+        self._dictionaryChooserAction.setWhatsThis(i18n("Select a dictionary"))
+        self._dictionaryChooserAction.setObjectName("dictchooser")
+        self.connect(self._dictionaryChooserAction, SIGNAL("triggered(int)"),
+            self.dictionaryChanged)
+
+        self.updateDictionarySelector()
+
+        # reading chooser
+        self._readingChooserAction = KSelectAction(i18n("&Pronunciation"), self)
+        self._readingChooserAction.setWhatsThis(
+            i18n("Select the transcription/romanisation for giving the character's pronunciation"))
+        self._readingChooserAction.setObjectName("readingchooser")
+        self.connect(self._readingChooserAction, SIGNAL("triggered(int)"),
+            self.readingChanged)
+
+        self.updateReadingSelector()
+
+        # character domain chooser
+        self._charDomainChooserAction = KSelectAction(i18n("&Character domain"),
+            self)
+        self._charDomainChooserAction.setWhatsThis(
+            i18n("Select the character domain to narrow search results"))
+        self._charDomainChooserAction.setObjectName("chardomainchooser")
+        self.connect(self._charDomainChooserAction, SIGNAL("triggered(int)"),
+            self.charDomainChanged)
+
+        self.updateCharDomainSelector()
+
         # section chooser action
         self._sectionChooserAction = KActionMenu(i18n("&Sections"), self)
         self._sectionChooserAction.setWhatsThis(
@@ -445,15 +551,122 @@ function _go() { }
 
         return action
 
+    def updateDictionarySelector(self):
+        dictionaryView = self.renderThread.getObjectInstance(DictionaryView)
+
+        self.dictionaryList = sorted(dictionaryView.availableDictionaryNames)
+
+        dictionaryNames = []
+        currentIndex = None
+        for idx, dictionary in enumerate(self.dictionaryList):
+            if self.dictionary == dictionary:
+                currentIndex = idx
+
+            if dictionary in self.DICTIONARY_NAMES:
+                name = self.DICTIONARY_NAMES[dictionary].toString()
+            else:
+                language = getDictionaryLanguage(dictionary)
+                if language in self.LANGUAGE_NAMES:
+                    name = self.LANGUAGE_NAMES[language].toString()
+                else:
+                    # fallback
+                    name = language
+            dictionaryNames.append(name)
+
+        self._dictionaryChooserAction.setItems(dictionaryNames)
+        if currentIndex is not None:
+            self._dictionaryChooserAction.setCurrentItem(currentIndex)
+
+    def updateReadingSelector(self):
+        self.readingList = LANGUAGE_COMPATIBLE_MAPPINGS.get(self.language, [])
+
+        readingNames = []
+        currentIndex = None
+        for idx, reading in enumerate(self.readingList):
+            if self.reading == reading:
+                currentIndex = idx
+
+            if reading in self.READING_NAMES:
+                name = self.READING_NAMES[reading].toString()
+            else:
+                # fallback
+                name = reading
+            readingNames.append(name)
+
+        self._readingChooserAction.setItems(readingNames)
+        if currentIndex is not None:
+            self._readingChooserAction.setCurrentItem(currentIndex)
+
+    def updateCharDomainSelector(self):
+        dictionaryView = self.renderThread.getObjectInstance(DictionaryView)
+
+        self.characterDomainList = dictionaryView.compatibleCharacterDomains[:]
+
+        characterDomainNames = []
+        currentIndex = None
+        for idx, charDomain in enumerate(self.characterDomainList):
+            if self.characterDomain == charDomain:
+                currentIndex = idx
+
+            if charDomain in self.CHARACTER_DOMAINS:
+                name = self.CHARACTER_DOMAINS[charDomain].toString()
+            else:
+                # fallback
+                name = charDomain
+            characterDomainNames.append(name)
+
+        self._charDomainChooserAction.setItems(characterDomainNames)
+        if currentIndex is not None:
+            self._charDomainChooserAction.setCurrentItem(currentIndex)
+
     def updateSectionSelector(self):
         for idx, section in self.sectionIndex.items():
             toggleAction = self.sectionSelectActions[idx]
             toggleAction.setChecked(section not in self.hiddenSections)
 
-            charInfo = self.renderThread.getObjectInstance(
-                characterinfo.CharacterInfo)
-            toggleAction.setEnabled(charInfo.dictionary != None \
-                or not section in htmlview.HtmlView.METHODS_NEED_DICTIONARY)
+            toggleAction.setEnabled(self.dictionary != None \
+                or not DictionaryView.needsDictionary(section))
+
+    def _reloadObjects(self, **options):
+        # read existing settings
+        if self.renderThread.hasObject(DictionaryView):
+            dictionaryView = self.renderThread.getObjectInstance(DictionaryView)
+            for option in 'characterDomain', 'dictionary', 'reading':
+                if option not in options:
+                    options[option] = getattr(dictionaryView, option)
+
+        self._loadObjects(options)
+
+        self.reload()
+
+        self.updateDictionarySelector()
+        self.updateReadingSelector()
+        self.updateCharDomainSelector()
+        self.updateSectionSelector()
+
+    def dictionaryChanged(self, index):
+        dictionary = self.dictionaryList[index]
+
+        if dictionary in self.lastReading:
+            reading = self.lastReading[dictionary]
+        else:
+            reading = None
+
+        self._reloadObjects(reading=reading, dictionary=dictionary)
+
+        self.lastReading[self.dictionary] = self.reading
+
+    def readingChanged(self, index):
+        reading = self.readingList[index]
+
+        self._reloadObjects(reading=reading)
+
+        self.lastReading[self.dictionary] = self.reading
+
+    def charDomainChanged(self, index):
+        characterDomain = self.characterDomainList[index]
+
+        self._reloadObjects(characterDomain=characterDomain)
 
     def sectionSelectionChanged(self, index, checked):
         section = self.sectionIndex[index]
@@ -555,6 +768,21 @@ function _go() { }
             self._forwardAction)
         return self._forwardAction
 
+    def dictionaryChooserAction(self, actionCollection):
+        actionCollection.addAction(self._dictionaryChooserAction.objectName(),
+            self._dictionaryChooserAction)
+        return self._dictionaryChooserAction
+
+    def readingChooserAction(self, actionCollection):
+        actionCollection.addAction(self._readingChooserAction.objectName(),
+            self._readingChooserAction)
+        return self._readingChooserAction
+
+    def charDomainChooserAction(self, actionCollection):
+        actionCollection.addAction(self._charDomainChooserAction.objectName(),
+            self._charDomainChooserAction)
+        return self._charDomainChooserAction
+
     def sectionChooserAction(self, actionCollection):
         actionCollection.addAction(self._sectionChooserAction.objectName(),
             self._sectionChooserAction)
@@ -564,6 +792,15 @@ function _go() { }
         actionCollection.addAction(self._printAction.objectName(),
             self._printAction)
         return self._printAction
+
+    def registerGlobalActions(self, actionCollection):
+        for action in ('findAction', 'findNextAction', 'findPrevAction',
+            'copyAction', 'selectAllAction', 'backwardAction', 'forwardAction',
+            'helpPageAction', 'lookupSelectionAction', 'printAction',
+            'miniModeAction', 'lookupClipboardAction',
+            'dictionaryChooserAction', 'readingChooserAction',
+            'charDomainChooserAction', 'sectionChooserAction'):
+            getattr(self, action)(actionCollection)
 
     def slotLinkClicked(self, url):
         cmd = unicode(url.toString()).replace('about:blank#', '')
@@ -730,7 +967,7 @@ function _go() { }
         if self.title() == 'One word a day':
             self.page().mainFrame().evaluateJavaScript(
                 "setText('%s');" % i18n('The word:'))
-            self.renderThread.enqueue(characterinfo.CharacterInfo,
+            self.renderThread.enqueue(DictionaryView,
                 'getRandomDictionaryEntry')
 
     def playCharString(self, path):
@@ -773,16 +1010,14 @@ function _go() { }
             + '</body></html>'
 
     def getHelpPage(self):
-        charInfo = self.renderThread.getObjectInstance(
-            characterinfo.CharacterInfo)
-        if charInfo.dictionary:
+        if self.dictionary:
             searchMessage = \
                 i18n('Use <tt>?</tt> and <tt>*</tt> for fuzzy searching.')
         else:
             searchMessage = ''
 
         # examples
-        key = (charInfo.language, charInfo.reading)
+        key = (self.language, self.reading)
         if key in self.SEARCH_EXAMPLES:
             examples = []
             for example in self.SEARCH_EXAMPLES[key]:
@@ -810,8 +1045,8 @@ function _go() { }
             #+ 'Your browser does not support embedded svg.</object>'
             #+ '<img src="file://%s" align="right"/>' \
                 #% util.getData('eclectus_big.png') \
-        if charInfo.language in self.WELCOME_TEXT:
-            welcomeText = self.WELCOME_TEXT[charInfo.language]
+        if self.language in self.WELCOME_TEXT:
+            welcomeText = self.WELCOME_TEXT[self.language]
         else:
             welcomeText = i18n('Welcome')
 
@@ -860,7 +1095,6 @@ function _go() { }
         elif not self.isValidPageType(pageType) \
             or (pageType == 'character' and len(value) > 1) \
             or re.match('[\*\?]*$', value):
-            print pageType.encode('utf8'), value.encode('utf8')
             self.setHtml(self.getErrorPage(), QUrl('file:///'))
         else:
             self.setHtml('')
@@ -876,17 +1110,16 @@ function _go() { }
         else:
             sections = self.DEFAULT_VIEW_SECTIONS[pageType]
 
-        charInfo = self.renderThread.getObjectInstance(
-            characterinfo.CharacterInfo)
         self.currentJobs = []
         for method in sections:
-            if (charInfo.dictionary != None \
-                or not method in htmlview.HtmlView.METHODS_NEED_DICTIONARY) \
-                and method not in self.hiddenSections:
-                if (method not in self.sectionContentVisible \
+            if ((not self.dictionary.startswith('PSEUDO_')
+                or not DictionaryView.needsDictionary(method))
+                and method not in self.hiddenSections):
+
+                if (method not in self.sectionContentVisible
                     or self.sectionContentVisible[method]):
                     # render only if visible
-                    self.renderThread.enqueue(htmlview.HtmlView, method, value)
+                    self.renderThread.enqueue(DictionaryView, method, value)
                     self.currentJobs.append((method, value))
                 else:
                     self.currentJobs.append((method, None))
@@ -956,10 +1189,10 @@ function _go() { }
                     htmlList.append(self.constructHeading(method,
                         unicode(self.SECTION_NAMES[method].toString())))
 
-                if self.renderThread.hasCachedContent(htmlview.HtmlView, method,
+                if self.renderThread.hasCachedContent(DictionaryView, method,
                     value):
                     content = self.renderThread.getCachedContent(
-                        htmlview.HtmlView, method, value)
+                        DictionaryView, method, value)
                     htmlList.append(unicode(content))
 
         return '<html><head><title>Dictionary</title>' \
@@ -993,23 +1226,24 @@ function _go() { }
             else:
                 self.pluginConfig.writeEntry("Dictionary last page", '')
 
+            dictionaryView = self.renderThread.getObjectInstance(DictionaryView)
+            for key, value in dictionaryView.settings().items():
+                self.pluginConfig.writeEntry(key, unicode(value))
+
+            self.lastReading[self.dictionary] = self.reading
+            lastReadings = []
+            for dictionary, reading in self.lastReading.items():
+                lastReadings.append(':'.join([dictionary, reading]))
+            self.pluginConfig.writeEntry("Last readings", lastReadings)
+
     def contentRendered(self, id, classObject, method, args, param, content):
-        if classObject == htmlview.HtmlView \
+        if classObject == DictionaryView \
             and args and (method, args[0]) in self.currentJobs:
             self.setHtml(self.renderPage())
-        # once the page is loaded we can manipulate its javascript
-        if classObject == characterinfo.CharacterInfo \
+        elif classObject == DictionaryView \
             and method == 'getRandomDictionaryEntry':
             if content and self.title() == 'One word a day':
                 headword, _, _, _ = content[0]
                 self.page().mainFrame().evaluateJavaScript(
                     "setText('%s'); setWordLink('%s');" \
                         % (headword, encodeBase64(headword)))
-
-    def objectCreated(self, id, classObject):
-        if not self.initialised:
-            return
-        if classObject == htmlview.HtmlView:
-            self.reload()
-            # section availability depends on availability of dictionary
-            self.updateSectionSelector()

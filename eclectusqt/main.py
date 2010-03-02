@@ -70,56 +70,14 @@ from eclectusqt import renderthread
 from eclectusqt import util
 import eclectusqt
 
-from libeclectus import characterinfo
-from libeclectus import htmlview
+from libeclectus.locale import setTranslationLanguage
 from libeclectus.util import getCJKScriptClass
-from libeclectus.dictionary import getDictionaryLanguage
 
 doDebug = 1
 
 class MainWindow(KXmlGuiWindow):
-    READING_NAMES = {'Pinyin': ki18n('Pinyin'),
-        'WadeGiles': ki18n('Wade-Giles'), 'MandarinIPA': ki18n('IPA'),
-        'GR': ki18n('Gwoyeu Romatzyh'), 'Jyutping': ki18n('Jyutping'),
-        'CantoneseYale': ki18n('Yale'), 'Hangul': ki18n('Hangul'),
-        'Kana': ki18n('Kana')}
-
-    LANGUAGE_NAMES = {'zh-cmn-Hant': ki18n('Mandarin (Traditional)'),
-        'zh-cmn-Hans': ki18n('Mandarin (Simplified)'),
-        'zh-yue-Hant': ki18n('Cantonese (Traditional)'),
-        'zh-yue-Hans': ki18n('Cantonese (Simplified)'), 'ko': ki18n('Korean'),
-        'ja': ki18n('Japanese')}
-
-    EXT_DICTIONARY_NAMES = {
-        ('zh-cmn-Hans', 'CEDICT'): ki18n('Simplified Chinese-English (CEDICT)'),
-        ('zh-cmn-Hant', 'CEDICT'): \
-            ki18n('Traditional Chinese-English (CEDICT)'),
-        ('zh-cmn-Hant', 'CEDICTGR'): \
-            ki18n('Traditional Chinese-English for Gwoyeu Romatzyh (CEDICTGR)'),
-        ('zh-cmn-Hans', 'HanDeDict'): \
-            ki18n('Simplified Chinese-German (HanDeDict)'),
-        ('zh-cmn-Hant', 'HanDeDict'): \
-            ki18n('Traditional Chinese-German (HanDeDict)'),
-        ('zh-cmn-Hans', 'CFDICT'): ki18n('Simplified Chinese-French (CFDICT)'),
-        ('zh-cmn-Hant', 'CFDICT'): ki18n('Traditional Chinese-French (CFDICT)'),
-        ('ja', 'EDICT'): ki18n('Japanese-English (EDICT)')}
-
-    CHARACTER_DOMAINS = [
-        ('Unicode', ki18n('all characters')),
-        ('GB2312', ki18n(
-            'Simplified Chinese: 6763 characters from standard GB2312')),
-        ('BIG5', ki18n(
-            'Traditional Chinese: 13063 characters from standard BIG5')),
-        ('BIG5HKSCS', ki18n(
-            'Cantonese with traditional characters: 17575 characters from standard BIG5-HKSCS')),
-        ('JISX0208', ki18n(
-            'Japanese: 6356 characters from standard JIS X 0208')),
-        ('JISX0208_0213', ki18n(
-            'Japanese: 9748 characters from standards JIS X 0208/0213')),
-        ]
-    """Pretty print strings for character domains."""
-
     CHOOSER_PLUGINS = [
+        # TODO reenable
         (radicalpage.RadicalPage, ki18n('&Radicals')),
         (componentpage.ComponentPage, ki18n('&Components')),
         (handwritingpage.HandwritingPage, ki18n('Hand&writing')),
@@ -132,48 +90,27 @@ class MainWindow(KXmlGuiWindow):
 
         self.miniMode = False
         self.initialised = False
-        # start rendering thread
-        htmlViewSettings = htmlview.HtmlView.readSettings(
-            dict([(unicode(key), unicode(value)) \
-                for key, value in DictionaryConfig.entryMap().items()]))
 
+        # set i18n language for libeclectus
+        setTranslationLanguage(unicode(KGlobal.locale().language()))
+
+        # start rendering thread
         self.renderThread = renderthread.SQLRenderThread(g_app)
         self.connect(g_app, SIGNAL("aboutToQuit()"),
             self.renderThread.quit)
         self.renderThread.start()
 
-        dictionaryData = {}
-        for field in ['Language', 'Transcription', 'Dictionary',
-            'Character Domain', 'Update database url']:
-            dictionaryData[field] = util.readConfigString(DictionaryConfig,
-                field)
-
-        if not dictionaryData['Update database url']:
-            dictionaryData['Update database url'] = unicode('sqlite:///'
-                + util.getLocalData('dictionaries.db'))
-
-        self.renderThread.setCachedObject(characterinfo.CharacterInfo,
-            dictionaryData['Language'], dictionaryData['Transcription'],
-            dictionaryData['Dictionary'], dictionaryData['Character Domain'],
-            dictionaryData['Update database url'])
-        charInfo = self.renderThread.getObjectInstance(
-            characterinfo.CharacterInfo)
-        # set htmlview object and give proper locale
-        htmlViewSettings['localLanguage'] = unicode(KGlobal.locale().language())
-        self.renderThread.setCachedObject(htmlview.HtmlView, charInfo,
-            **htmlViewSettings)
-
-        self.connect(self.renderThread, SIGNAL("objectCreated"),
-            self.objectCreated)
-        self.connect(self.renderThread, SIGNAL("queueEmpty"),
-            self.queueEmpty)
-        self.connect(self.renderThread, SIGNAL("jobEnqueued"),
-            self.jobEnqueued)
+        self.connect(self.renderThread, SIGNAL("queueEmpty"), self.queueEmpty)
+        self.connect(self.renderThread, SIGNAL("jobEnqueued"), self.jobEnqueued)
         self.connect(self.renderThread, SIGNAL("jobErrorneous"),
             lambda jobId, classObject, method, args, param, e, stacktrace: \
                 showDebug(stacktrace.decode('utf8')))
 
         self.updateDialog = update.UpdateDialog(self, self.renderThread)
+        #self.updateDialog = None # set to None to disable updating
+        if self.updateDialog:
+            self.connect(self.updateDialog, SIGNAL("databaseChanged()"),
+                lambda: self.emit(SIGNAL("databaseChanged()")))
 
         # set up UI
         self.setupUi()
@@ -196,7 +133,7 @@ class MainWindow(KXmlGuiWindow):
         self.initialised = True
 
         if (GeneralConfig.readEntry("Show installer on startup", 'True')
-            == 'True'):
+            == 'True') and self.updateAction:
             self.updateAction.trigger()
 
     def setupUi(self):
@@ -211,6 +148,10 @@ class MainWindow(KXmlGuiWindow):
             self.renderThread, PluginConfig)
         self.connect(self.dictionaryPage,
             SIGNAL('pageChanged(const QString &)'), self.slotPageChanged)
+        # forward settingsChanged
+        self.connect(self.dictionaryPage, SIGNAL("settingsChanged()"),
+            lambda: self.emit(SIGNAL("settingsChanged()")))
+        # TODO make this modular
         self.connect(self.dictionaryPage,
             SIGNAL("vocabularyAdded(const QString &, const QString &, const QString &, const QString &)"),
             self.slotVocabularyAdded)
@@ -244,29 +185,15 @@ class MainWindow(KXmlGuiWindow):
         KStandardAction.quit(g_app.quit, self.actionCollection())
 
         # dictionary actions
-        self.dictionaryPage.findAction(self.actionCollection())
-        self.dictionaryPage.findNextAction(self.actionCollection())
-        self.dictionaryPage.findPrevAction(self.actionCollection())
-        self.dictionaryPage.copyAction(self.actionCollection())
-        self.dictionaryPage.selectAllAction(self.actionCollection())
-        self.dictionaryPage.backwardAction(self.actionCollection())
-        self.dictionaryPage.forwardAction(self.actionCollection())
-        self.dictionaryPage.helpPageAction(self.actionCollection())
-        self.dictionaryPage.lookupSelectionAction(self.actionCollection())
-        self.dictionaryPage.sectionChooserAction(self.actionCollection())
-        self.miniModeAction = self.dictionaryPage.miniModeAction(
-            self.actionCollection())
-        self.lookupClipboardAction = self.dictionaryPage.lookupClipboardAction(
-            self.actionCollection())
-        self.lookupClipboardAction.setGlobalShortcut(
-            KShortcut(Qt.CTRL + Qt.ALT + Qt.Key_N))
-        self.dictionaryPage.printAction(self.actionCollection())
-
+        self.dictionaryPage.registerGlobalActions(self.actionCollection())
         # update dictionaries
-        self.updateAction = self.updateDialog.updateAction(
-            self.actionCollection())
-        # optimise database
-        self.updateDialog.optimiseAction(self.actionCollection())
+        if self.updateDialog:
+            self.updateAction = self.updateDialog.updateAction(
+                self.actionCollection())
+            # optimise database
+            self.updateDialog.optimiseAction(self.actionCollection())
+        else:
+            self.updateAction = None
 
         # search bar
         self.characterCombo = KHistoryComboBox()
@@ -337,51 +264,7 @@ class MainWindow(KXmlGuiWindow):
         self.connect(QApplication.clipboard(), SIGNAL("selectionChanged()"),
             self.slotSelectionChanged)
 
-        # dictionary chooser
-        self.dictChooserAction = KSelectAction(i18n("&Dictionary"), self)
-        self.dictChooserAction.setWhatsThis(i18n("Select a dictionary"))
-        self.actionCollection().addAction("dictchooser", self.dictChooserAction)
-        self.updateDictionarySelector()
-
-        self.connect(self.dictChooserAction, SIGNAL("triggered(int)"),
-            self.dictionaryChanged)
-
-        # reading chooser
-        self.readingChooserAction = KSelectAction(i18n("&Pronunciation"), self)
-        self.readingChooserAction.setWhatsThis(
-            i18n("Select the transcription/romanisation for giving the character's pronunciation"))
-        self.actionCollection().addAction("readingchooser",
-            self.readingChooserAction)
-        self.updateReadingSelector()
-
-        self.connect(self.readingChooserAction,
-            SIGNAL("triggered(const QString)"), self.transcriptionChanged)
-
-        # character domain chooser
-        self.charDomainChooserAction = KSelectAction(i18n("&Character domain"),
-            self)
-        self.charDomainChooserAction.setWhatsThis(
-            i18n("Select the character domain to narrow search results"))
-        self.actionCollection().addAction("chardomainchooser",
-            self.charDomainChooserAction)
-        self.updateCharDomainSelector()
-
-        self.connect(self.charDomainChooserAction, SIGNAL("triggered(int)"),
-            self.charDomainChanged)
-
     def restoreWindowState(self):
-        # get saved settings
-        lastReadings = util.readConfigString(DictionaryConfig, "Last readings",
-            '').split(',')
-        self.LAST_READING = {}
-        for entry in lastReadings:
-            if not entry:
-                continue
-            entryLang, entryDict, entryReading = entry.split(':', 2)
-            if entryDict == '':
-                entryDict = None
-            self.LAST_READING[(entryLang, entryDict)] = entryReading
-
         # GUI settings
         history = util.readConfigString(GeneralConfig, "Url History", '')\
             .split(',')
@@ -478,29 +361,10 @@ class MainWindow(KXmlGuiWindow):
         GeneralConfig.writeEntry("Toolbox visibile",
             str(self.characterChooserOriginalVisibility))
 
-        charInfo = self.renderThread.getObjectInstance(
-            characterinfo.CharacterInfo)
-        DictionaryConfig.writeEntry("Language", charInfo.language)
-        DictionaryConfig.writeEntry("Transcription", charInfo.reading)
-        DictionaryConfig.writeEntry("Dictionary", charInfo.dictionary)
-        DictionaryConfig.writeEntry("Character Domain",
-            charInfo.characterDomain)
-
-        htmlView = self.renderThread.getObjectInstance(htmlview.HtmlView)
-        for key, value in htmlView.settings().items():
-            DictionaryConfig.writeEntry(key, unicode(value))
-
-        self.LAST_READING[(charInfo.language, charInfo.dictionary)] \
-            = charInfo.reading
-        lastReadings = []
-        for language, dictionary in self.LAST_READING.keys():
-            reading = self.LAST_READING[(language, dictionary)]
-            if dictionary == None:
-                dictionary = ''
-            lastReadings.append(':'.join([language, dictionary, reading]))
-        DictionaryConfig.writeEntry("Last readings", lastReadings)
-
         return True
+
+    def settings(self):
+        return self.dictionaryPage.settings()
 
     def slotToggleToolbox(self, show):
         if not self.miniMode:
@@ -545,140 +409,19 @@ class MainWindow(KXmlGuiWindow):
             self.resize(self.miniModeWindowSize)
 
             # tell user what to do
-            miniModeShortcut = unicode(i18n(
-                self.miniModeAction.shortcut().toString()))
-            text = unicode(i18n("Mini-mode hides your menubar and toolbars. Press %1 again to get back to normal mode.", miniModeShortcut))
-            lookupShortcut = self.lookupClipboardAction.globalShortcut()\
-                .toString(QtGui.QKeySequence.NativeText)
-            if lookupShortcut:
-                text = text + "\n\n" \
-                    + unicode(i18n("You may look up entries by selecting a word and pressing %1. Alternatively you can turn on auto-lookup or paste from the clipboard by pressing the middle mouse button.",
-                    i18n(lookupShortcut)))
+            # TODO renable
+            #miniModeShortcut = unicode(i18n(
+                #self.miniModeAction.shortcut().toString()))
+            #text = unicode(i18n("Mini-mode hides your menubar and toolbars. Press %1 again to get back to normal mode.", miniModeShortcut))
+            #lookupShortcut = self.lookupClipboardAction.globalShortcut()\
+                #.toString(QtGui.QKeySequence.NativeText)
+            #if lookupShortcut:
+                #text = text + "\n\n" \
+                    #+ unicode(i18n("You may look up entries by selecting a word and pressing %1. Alternatively you can turn on auto-lookup or paste from the clipboard by pressing the middle mouse button.",
+                    #i18n(lookupShortcut)))
 
-            KMessageBox.information(self, text, i18n("Mini-mode"),
-                "show_mini-mode_notice")
-
-    def updateDictionarySelector(self):
-        languages = self.LANGUAGE_NAMES.keys()
-        languages.sort()
-
-        charInfo = self.renderThread.getObjectInstance(
-            characterinfo.CharacterInfo)
-        dictionaries = charInfo.getAvailableDictionaries()
-        dictionaries.sort()
-        currentLanguage = charInfo.language
-        currentDictionary = charInfo.dictionary
-
-        seenLanguages = set()
-        self.dictionaryList = []
-        currentIndex = None
-        for dictionary in dictionaries:
-            lang = getDictionaryLanguage(dictionary)
-            for language in languages:
-                if language.startswith(lang):
-                    seenLanguages.add(language)
-                    if currentDictionary == dictionary \
-                        and currentLanguage == language:
-                        currentIndex = len(self.dictionaryList)
-
-                    if (language, dictionary) in self.EXT_DICTIONARY_NAMES:
-                        name = self.EXT_DICTIONARY_NAMES[
-                            (language, dictionary)].toString()
-                    else:
-                        name = self.LANGUAGE_NAMES[language].toString()
-                    self.dictionaryList.append((name, language, dictionary))
-
-        self.dictChooserAction.setItems(
-            [name for name, _, _ in self.dictionaryList])
-        if currentIndex != None:
-            self.dictChooserAction.setCurrentItem(currentIndex)
-
-    def updateReadingSelector(self):
-        # update readings
-        charInfo = self.renderThread.getObjectInstance(
-            characterinfo.CharacterInfo)
-        readings = charInfo.getCompatibleReadings(charInfo.language)
-        readingNames = [self.READING_NAMES[reading].toString() \
-            for reading in readings]
-        self.readingChooserAction.setItems(readingNames)
-
-        readingName = self.READING_NAMES[charInfo.reading].toString()
-        currentIndex = readingNames.index(readingName)
-        self.readingChooserAction.setCurrentItem(currentIndex)
-
-        self.readingNameLookup = dict([(name.toString(), reading) \
-            for reading, name in self.READING_NAMES.items()])
-
-    def updateCharDomainSelector(self):
-        # update readings
-        charInfo = self.renderThread.getObjectInstance(
-            characterinfo.CharacterInfo)
-        charDomains = charInfo.getCompatibleCharacterDomains()
-
-        charDomainStrings = []
-        charDomainsSorted = []
-        for charDomain, string in self.CHARACTER_DOMAINS:
-            if charDomain in charDomains:
-                charDomainStrings.append(string.toString())
-                charDomainsSorted.append(charDomain)
-
-        self.charDomainChooserAction.setItems(charDomainStrings)
-        currentIndex = charDomainsSorted.index(charInfo.characterDomain)
-        self.charDomainChooserAction.setCurrentItem(currentIndex)
-
-    def _reloadObjects(self, **kwargs):
-        """Reload objects hold by render thread."""
-        charInfo = self.renderThread.getObjectInstance(
-            characterinfo.CharacterInfo)
-
-        options = {}
-        for option in ('language', 'reading', 'dictionary', 'characterDomain',
-            'dictionary', 'databaseUrl'):
-            options[option] = kwargs.get(option, getattr(charInfo, option))
-
-        self.renderThread.setCachedObject(characterinfo.CharacterInfo,
-            **options)
-
-        charInfo = self.renderThread.getObjectInstance(
-            characterinfo.CharacterInfo)
-        htmlView = self.renderThread.getObjectInstance(
-            htmlview.HtmlView)
-        htmlViewSettings = htmlView.settings()
-        self.renderThread.setCachedObject(htmlview.HtmlView, charInfo,
-            **htmlViewSettings)
-
-        return charInfo
-
-    def dictionaryChanged(self, index):
-        _, language, dictionary = self.dictionaryList[index]
-
-        if (language, dictionary) in self.LAST_READING:
-            reading = self.LAST_READING[(language, dictionary)]
-        else:
-            reading = None
-
-        charInfo = self._reloadObjects(language=language, reading=reading,
-            dictionary=dictionary)
-
-        if charInfo.reading:
-            self.LAST_READING[(language, dictionary)] = charInfo.reading
-
-    def transcriptionChanged(self, transcription):
-        charInfo = self.renderThread.getObjectInstance(
-            characterinfo.CharacterInfo)
-        reading = self.readingNameLookup[transcription]
-        language = charInfo.language
-        dictionary = charInfo.dictionary
-        if reading == charInfo.reading:
-            return
-
-        charInfo = self._reloadObjects(reading=reading)
-
-        self.LAST_READING[(language, dictionary)] = charInfo.reading
-
-    def charDomainChanged(self, charDomainIdx):
-        charDomain, _ = self.CHARACTER_DOMAINS[charDomainIdx]
-        charInfo = self._reloadObjects(characterDomain=charDomain)
+            #KMessageBox.information(self, text, i18n("Mini-mode"),
+                #"show_mini-mode_notice")
 
     def slotCharacterComboActivated(self, inputString):
         self.characterCombo.addToHistory(inputString)
@@ -701,13 +444,15 @@ class MainWindow(KXmlGuiWindow):
                     if isinstance(focusWidget, editWidgetCls):
                         return
 
-            if self.onlyAutoLookupCJKCharacters:
-                clipboardText = unicode(QApplication.clipboard().text(
-                    QClipboard.Selection).simplified()).strip()
-                if not MainWindow.hasCJKCharacter(clipboardText):
+            clipboardText = unicode(QApplication.clipboard().text(
+                QClipboard.Selection).simplified()).strip()
+            if not clipboardText or len(clipboardText) >= 20:
+                return
+            if (self.onlyAutoLookupCJKCharacters and
+                not MainWindow.hasCJKCharacter(clipboardText)):
                     return
 
-            self.lookupClipboardAction.trigger()
+            self.dictionaryPage.load(clipboardText)
             # make window flash in taskbar
             self.activateWindow()
 
@@ -738,14 +483,6 @@ class MainWindow(KXmlGuiWindow):
             headword, reading, translation, audio)
         if self.vocabularyPlugin != None:
             self.characterChooser.setCurrentIndex(self.vocabularyPlugin)
-
-    def objectCreated(self, id, classObject):
-        if not self.initialised:
-            return
-        if classObject == characterinfo.CharacterInfo:
-            self.updateDictionarySelector()
-            self.updateReadingSelector()
-            self.updateCharDomainSelector()
 
     def queueEmpty(self):
         QApplication.restoreOverrideCursor()

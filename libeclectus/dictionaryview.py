@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 u"""
-Provides HTML formatting services.
+Provides HTML formatting services for dictionary queries.
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -21,13 +21,16 @@ import os
 import os.path
 import re
 import urllib
-import gettext
+
+from cjklib.dbconnector import getDBConnector
 
 from libeclectus import util
+from libeclectus.chardb import CharacterDB
+from libeclectus.dictionary import (getDictionary, getDefaultDictionary,
+    getAvailableDictionaryNames)
+from libeclectus.locale import gettext, ngettext, getTranslationLanguage
 
-gettext = ngettext = None
-
-class HtmlView:
+class DictionaryView:
     WEB_LINKS = {'all': ['getUnihanLink'],
         'zh-cmn-Hant': ['getCEDICTLink', 'getHanDeDictLink', 'getDictCNLink',
             'getEduTwLink'],
@@ -58,18 +61,39 @@ class HtmlView:
         'zh-yue-Hant': 't', 'zh-yue-Hans': '', 'ja': 'j', 'ko': 't'}
     """Language dependant Wikimedia Commons stroke order image prefix."""
 
-    METHODS_NEED_DICTIONARY = ['getVocabularySection',
-        'getFullVocabularySection', 'getVocabularySearchSection'
-        'getOtherVocabularySearchSection', 'getSimilarVocabularySearchSection']
-    """Methods that need a dictionary present to work."""
+    @classmethod
+    def needsDictionary(cls, method):
+        return hasattr(getattr(cls, method), 'needsDictionary')
 
-    def __init__(self, charInfo, strokeOrderType=None,
-        showAlternativeHeadwords=True, useExtraReadingInformation=False,
-        localLanguage=None):
-        self.charInfo = charInfo
+    def __init__(self, dictionary=None, dbConnectInst=None, databaseUrl=None,
+        strokeOrderType=None, showAlternativeHeadwords=True, **options):
+
+        self.db = dbConnectInst or getDBConnector(
+            util.getDatabaseConfiguration(databaseUrl))
+
         self.showAlternativeHeadwords = showAlternativeHeadwords
-        self.useExtraReadingInformation = useExtraReadingInformation
+        self.useExtraReadingInformation = options.get(
+            'useExtraReadingInformation', False)
 
+        self.availableDictionaryNames = getAvailableDictionaryNames(self.db)
+
+        # get ditionary
+        if dictionary in self.availableDictionaryNames:
+            self._dictionary = getDictionary(dictionary, dbConnectInst=self.db,
+                ignoreIllegalSettings=True, **options)
+        else:
+            translationLanguage = getTranslationLanguage()
+            self._dictionary = getDefaultDictionary(translationLanguage,
+                dbConnectInst=self.db, ignoreIllegalSettings=True, **options)
+
+        self.dictionary = self._dictionary.PROVIDES
+        self.reading = self._dictionary.reading
+        self.language = self._dictionary.language
+        self.characterDomain = self._dictionary.charDB.characterDomain
+        self.compatibleCharacterDomains \
+            = self._dictionary.charDB.getCompatibleCharacterDomains()
+
+        # stroke order
         availableStrokeOrder = self.getAvailableStrokeOrderTypes()
         if strokeOrderType and strokeOrderType in availableStrokeOrder:
             self.strokeOrderType = strokeOrderType
@@ -88,15 +112,15 @@ class HtmlView:
             else:
                 self.strokeOrderType = None
 
-        t = util.getTranslation(localLanguage)
-        global gettext, ngettext
-        gettext = t.ugettext
-        ngettext = t.ungettext
-
     def settings(self):
         return {'strokeOrderType': self.strokeOrderType,
             'showAlternativeHeadwords': self.showAlternativeHeadwords,
-            'useExtraReadingInformation': self.useExtraReadingInformation}
+            'useExtraReadingInformation': self.useExtraReadingInformation,
+            'Transcription': self.reading,
+            'Dictionary': self.dictionary,
+            'Character Domain': self.characterDomain,
+            'Update database url': self.db.databaseUrl
+            }
 
     @classmethod
     def readSettings(cls, settingsDict):
@@ -115,6 +139,11 @@ class HtmlView:
                 settings['useExtraReadingInformation'] = True
             else:
                 settings['useExtraReadingInformation'] = False
+
+        settings['reading'] = settingsDict.get('Transcription', None)
+        settings['dictionary'] = settingsDict.get('Dictionary', None)
+        settings['characterDomain'] = settingsDict.get('Character Domain', None)
+        settings['databaseUrl'] = settingsDict.get('Update database url', None)
 
         return settings
 
@@ -147,7 +176,7 @@ class HtmlView:
 
         if charAltString and charAltString != charString:
             return displayCharString \
-                + HtmlView._getAlternativeStringRepresentation(charAltString)
+                + DictionaryView._getAlternativeStringRepresentation(charAltString)
         else:
             return displayCharString
 
@@ -201,12 +230,13 @@ class HtmlView:
             if charString != charStringAlt \
                 and useAltFunc(charString, charStringAlt):
                 displayCharString \
-                    = HtmlView._getDisplayCharStringRepresentation(charString,
-                        charStringAlt, forceBlocksOfFor=not smallSpacing)
+                    = DictionaryView._getDisplayCharStringRepresentation(
+                        charString, charStringAlt,
+                        forceBlocksOfFor=not smallSpacing)
             else:
                 displayCharString \
-                    = HtmlView._getDisplayCharStringRepresentation(charString,
-                        forceBlocksOfFor=not smallSpacing)
+                    = DictionaryView._getDisplayCharStringRepresentation(
+                        charString, forceBlocksOfFor=not smallSpacing)
 
             if len(charString) > 1:
                 page = 'word'
@@ -220,10 +250,10 @@ class HtmlView:
                         displayCharString)
                 + '</td>' \
                 + '<td class="reading">%s</td>' \
-                    % HtmlView._getReadingRepresentation(reading,
+                    % DictionaryView._getReadingRepresentation(reading,
                         forceBlocksOfFor=not smallSpacing) \
                 + '<td class="translation">%s</td>' \
-                    % HtmlView._getTranslationRepresentation(translation) \
+                    % DictionaryView._getTranslationRepresentation(translation) \
                 + '</tr>')
         return '\n'.join(htmlList)
 
@@ -307,10 +337,10 @@ class HtmlView:
 
     def commonsStrokeOrderImageSource(imageType):
         def getStrokeOrder(self, inputString, imageType):
-            languages = [self.charInfo.language]
-            if self.charInfo.language in self.COMMONS_STROKE_ORDER_FALLBACK:
+            languages = [self.language]
+            if self.language in self.COMMONS_STROKE_ORDER_FALLBACK:
                 languages.extend(
-                    self.COMMONS_STROKE_ORDER_FALLBACK[self.charInfo.language])
+                    self.COMMONS_STROKE_ORDER_FALLBACK[self.language])
 
             checkedPaths = set([])
             for language in languages:
@@ -333,10 +363,10 @@ class HtmlView:
 
     def commonsStrokeOrderImageSegmentedSource(imageType):
         def getStrokeOrder(self, inputString, imageType):
-            languages = [self.charInfo.language]
-            if self.charInfo.language in self.COMMONS_STROKE_ORDER_FALLBACK:
+            languages = [self.language]
+            if self.language in self.COMMONS_STROKE_ORDER_FALLBACK:
                 languages.extend(
-                    self.COMMONS_STROKE_ORDER_FALLBACK[self.charInfo.language])
+                    self.COMMONS_STROKE_ORDER_FALLBACK[self.language])
 
             checkedPaths = set([])
             for language in languages:
@@ -413,7 +443,7 @@ class HtmlView:
 
     def getEduTwLink(self, charString):
         if len(charString) == 1:
-            relLink = self.charInfo.getCharacterIndex(charString, 'EduTwIndex')
+            relLink = self._dictionary.charDB.getCharacterIndex(charString, 'EduTwIndex')
             if relLink:
                 link = u'http://www.edu.tw/files/site_content/M0001/bishuen/' \
                     + relLink
@@ -446,8 +476,8 @@ class HtmlView:
 
     def getLinkSection(self, inputString):
         functions = []
-        if self.charInfo.language in self.WEB_LINKS:
-            functions.extend(self.WEB_LINKS[self.charInfo.language])
+        if self.language in self.WEB_LINKS:
+            functions.extend(self.WEB_LINKS[self.language])
         if 'all' in self.WEB_LINKS:
             functions.extend(self.WEB_LINKS['all'])
 
@@ -462,7 +492,9 @@ class HtmlView:
     # FUNCTIONS BASED ON DATABASE
 
     def getVariantSection(self, inputString):
-        variants = self.charInfo.getHeadwordVariants(inputString)
+        variantEntries = self._dictionary.getVariantsForHeadword(inputString)
+        variants = [e.Headword for e in variantEntries
+            if e.Headword != inputString]
 
         variantLinks = []
         for variant in variants:
@@ -485,7 +517,11 @@ class HtmlView:
 
     def getSimilarsSection(self, inputString):
         """Returns a section of headwords with similar shape."""
-        similars = self.charInfo.getHeadwordSimilars(inputString)
+        similarEntries = self._dictionary.getSimilarsForHeadword(inputString,
+            orderBy=['Reading'])
+            #orderBy=['Reading', 'Headword']) # TODO doesn't work for CEDICT
+        similars = [e.Headword for e in similarEntries
+            if e.Headword != inputString]
 
         similarLinks = []
         for similar in similars:
@@ -509,28 +545,13 @@ class HtmlView:
         Gets a list of entries for the given character string, sorted by reading
         with annotated alternative character writing, audio and vocab handle.
         """
-        def getAudio(reading):
-            filePath = ''
-            fileName = self.charInfo.getPronunciationFile(reading)
-            if fileName:
-                baseDir, _ = fileName.split(os.sep, 1)
-                prependDir = util.locatePath(baseDir)
-                if not prependDir:
-                    return '', ''
-
-                path = os.path.join(prependDir, fileName)
-                if os.path.exists(path):
-                    filePath = path
-            if filePath:
-                audioHtml = ' <a class="audio" href="#play(%s)">%s</a>' \
-                    % (urllib.quote(filePath.encode('utf8')), gettext('Listen'))
+        def getAudio(filePath):
+            return (' <a class="audio" href="#play(%s)">%s</a>'
+                % (urllib.quote(filePath.encode('utf8')), gettext('Listen')))
                 #audioHtml = ' <a class="audio" href="#" onclick="new Audio(\'%s\').play(); return false;">%s</a>' \
                     #% (urllib.quote(filePath.encode('utf8')), gettext('Listen'))
                 #audioHtml = ' <audio src="%s" id="audio_%s" autoplay=false></audio><a class="audio" href="#" onClick="document.getElementById(\'audio_%s\').play(); return false;">%s</a>' \
                     #% (urllib.quote(filePath.encode('utf8')), reading, reading, gettext('Listen'))
-            else:
-                audioHtml = ''
-            return filePath, audioHtml
 
         readings = []
         translations = {}
@@ -539,8 +560,8 @@ class HtmlView:
         alternativeHeadwordIndex = {}
 
         # TODO index calculation is broken, e.g. 说
-        dictResult = self.charInfo.searchDictionaryExactHeadword(
-            inputString)
+        # TODO cache
+        dictResult = self._dictionary.getForHeadword(inputString)
 
         for idx, entry in enumerate(dictResult):
             _, charStringAlt, reading, translation = entry
@@ -600,7 +621,8 @@ class HtmlView:
 
             for reading in readings:
                 # get audio if available
-                filePath, audioHtml = getAudio(reading)
+                #filePath, audioHtml = getAudio(reading)
+                filePath, audioHtml = ('', '') # TODO
                 # get reading
                 readingEntry = '<a class="reading" href="#lookup(%s)">%s</a>' \
                     % (util.encodeBase64(reading),
@@ -673,12 +695,31 @@ class HtmlView:
 
         return '\n'.join(htmlList)
 
+    def _searchDictionaryHeadwordEntities(self, searchString, limit=None):
+        #TODO Caching would help here, as the search for the headword
+            #is already done somewhere else before.
+        #TODO Work on tonal changes for some characters in Mandarin
+        #TODO Get proper normalisation or collation for reading column.
+        entriesSet = set()
+        entries = [(e.Headword, e.Reading)
+            for e in self._dictionary.getForHeadword(searchString)]
+        if not entries:
+            entries = [(searchString, None)]
+
+        for headword, reading in entries:
+            entriesSet.update(self._dictionary.getEntitiesForHeadword(
+                headword, reading, limit=limit))
+        if limit:
+            return list(entriesSet)[:limit]
+        else:
+            return list(entriesSet)
+
     def getHeadwordContainedCharactersSection(self, inputString):
         """
         Gets a list of dictionary entries for characters of the given character
         string.
         """
-        dictResult = self.charInfo.searchDictionaryHeadwordEntities(inputString)
+        dictResult = self._searchDictionaryHeadwordEntities(inputString)
         return self._getContainedEntitiesSection(inputString, dictResult)
 
     def getHeadwordContainedVocabularySection(self, inputString):
@@ -686,19 +727,17 @@ class HtmlView:
         Gets a list of dictionary entries for substrings of the given character
         string.
         """
-        dictResult = self.charInfo.searchDictionaryHeadwordSubstrings(
-            inputString)
+        dictResult = self._dictionary.getSubstringsForHeadword(inputString)
         return self._getContainedEntitiesSection(inputString, dictResult)
 
+    @util.attr('needsDictionary')
     def getVocabularySection(self, inputString):
-        if not self.charInfo.dictionary:
-            return ''
-
         # we only need 4 entries, but because of double entries we might end up
         #   with some being merged, also need +1 to show the "more entries"
         #   play safe and select 10
-        dictResult = self.charInfo.searchDictionaryContainingHeadword(
-            inputString, orderBy=['Weight'], limit=10)
+        # TODO true contains
+        dictResult = self._dictionary.getForHeadword(
+            '*' + inputString + '*', orderBy=['Weight'], limit=10)
 
         htmlList = []
         if dictResult:
@@ -722,15 +761,13 @@ class HtmlView:
 
         return '\n'.join(htmlList)
 
+    @util.attr('needsDictionary')
     def getFullVocabularySection(self, inputString):
         """
         Gets a list of dictionary entries with exact matches and matches
         including the given character string.
         """
-        if not self.charInfo.dictionary:
-            return ""
-
-        dictResult = self.charInfo.searchDictionaryExactHeadword(inputString)
+        dictResult = self._dictionary.getForHeadword(inputString)
 
         htmlList = []
         htmlList.append('<table class="fullVocabulary">')
@@ -748,8 +785,9 @@ class HtmlView:
                     % gettext('No exact matches found'))
 
         # other matches
-        dictResult = self.charInfo.searchDictionaryContainingHeadword(
-            inputString)
+        # TODO true contains
+        dictResult = self._dictionary.getForHeadword('*' + inputString + '*',
+            orderBy=['Reading'])
 
         if dictResult:
             htmlList.append('<tr><td colspan="3"><h3>%s</h3></td></tr>' \
@@ -770,8 +808,7 @@ class HtmlView:
         readings = []
         translations = []
 
-        dictResult = (dictResult
-            or self.charInfo.searchDictionaryExactHeadword(char))
+        dictResult = (dictResult or self._dictionary.getForHeadword(char))
 
         if dictResult:
             # separate readings from translation
@@ -788,7 +825,7 @@ class HtmlView:
 
     def getCharacterWithComponentSection(self, inputString):
         """Gets a list of characters with the given character as component."""
-        chars = self.charInfo.getCharactersForComponents([inputString])
+        chars = self._dictionary.charDB.getCharactersForComponents([inputString])
 
         if inputString in chars:
             chars.remove(inputString)
@@ -853,17 +890,33 @@ class HtmlView:
                 return '<span class="entry">%s<ul>%s</ul></span>' \
                     % (head, ''.join(subLayer))
 
-        decompTree = self.charInfo.getCharacterDecomposition(inputString)
+        decompTree = self._dictionary.charDB.getCharacterDecomposition(inputString)
         if decompTree:
             seenEntry = set()
             return '<div class="tree">%s</div>' % getLayer(decompTree)
         else:
             return '<span class="meta">%s</span>' % gettext('No entry found')
 
+    def _searchDictionarySamePronunciationAs(self, searchString, limit=None):
+        """
+        Searches the dictionary for all characters that have the same reading
+        as the given headword.
+        """
+        entriesSet = set()
+        # TODO cache
+        for e in self._dictionary.getForHeadword(searchString):
+            entriesSet.update(self._dictionary.getForReading(
+                e.Reading, limit=limit))
+        if searchString in entriesSet:
+            entriesSet.remove(searchString)
+        if limit:
+            return list(entriesSet)[:limit]
+        else:
+            return list(entriesSet)
+
     def getCharacterWithSamePronunciationSection(self, inputString):
         """Gets a list of characters with the same pronunciation."""
-        dictResult = self.charInfo.searchDictionarySamePronunciationAs(
-            inputString)
+        dictResult = self._searchDictionarySamePronunciationAs(inputString)
 
         # group by reading and character
         charDict = {}
@@ -902,9 +955,8 @@ class HtmlView:
         htmlList.append('<table class="search">')
 
         # exact hits
-        exactDictResult, otherDictResult \
-            = self.charInfo.searchDictionaryExactNContaining(inputString,
-                orderBy=['Weight']) # TODO split into two calls
+        exactDictResult = self._dictionary.getFor(inputString,
+            orderBy=['Weight'])
 
         if exactDictResult:
             htmlList.append('<tr><td colspan="3"><h3>%s</h3></td></tr>' \
@@ -917,7 +969,7 @@ class HtmlView:
 
 
         # similar pronunciation
-        similarDictResult = self.charInfo.searchDictionarySimilarPronunciation(
+        similarDictResult = self._dictionary.getForSimilarReading(
             inputString, orderBy=['Weight'], limit=5)
 
         if similarDictResult:
@@ -934,6 +986,11 @@ class HtmlView:
 
 
         # other matches
+        # TODO optimize and include other matches in exact run, after all
+        #   translation will be all searched with LIKE '% ... %'
+        otherDictResult = self._dictionary.getFor('*' + inputString + '*',
+            orderBy=['Weight'])
+
         if otherDictResult:
             htmlList.append('<tr><td colspan="3"><h3>%s</h3></td></tr>' \
                 % gettext('Other matches'))
@@ -967,18 +1024,16 @@ class HtmlView:
 
         return '\n'.join(htmlList)
 
+    @util.attr('needsDictionary')
     def getOtherVocabularySearchSection(self, inputString):
         """
         Gets a list of vocabulary entries containing the given inputString.
         """
-        if not self.charInfo.dictionary:
-            return ""
-
         htmlList = []
 
         # TODO use caching
-        _, dictResult = self.charInfo.searchDictionaryExactNContaining(
-            inputString, orderBy=['Weight'])
+        dictResult = self._dictionary.getFor('*' + inputString + '*',
+            orderBy=['Weight'])
 
         if dictResult:
             htmlList.append('<table class="otherVocabulary">')
@@ -997,18 +1052,16 @@ class HtmlView:
 
         return '\n'.join(htmlList)
 
+    @util.attr('needsDictionary')
     def getSimilarVocabularySearchSection(self, inputString):
         """
         Gets a list of vocabulary entries with pronunciation similar to the
         given string.
         """
-        if not self.charInfo.dictionary:
-            return ""
-
         htmlList = []
 
-        dictResult = self.charInfo.searchDictionarySimilarPronunciation(
-            inputString)
+        dictResult = self._dictionary.getForSimilarReading(inputString,
+            orderBy=['Reading'])
 
         if dictResult:
             htmlList.append('<table class="similarVocabulary">')
@@ -1022,213 +1075,3 @@ class HtmlView:
                 % gettext('No matches found'))
 
         return '\n'.join(htmlList)
-
-    # CHARACTER SEARCH VIEWS
-
-    def getComponentSearchTable(self, components=[],
-        includeEquivalentRadicalForms=False, includeSimilarCharacters=False):
-        """
-        Gets a table of minimal components for searching characters by
-        component. Annotates given characters and characters that would
-        result in zero results if selected.
-        """
-        componentsByStrokeCount = self.charInfo.getMinimalCharacterComponents()
-
-        selected = set([self.charInfo.preferRadicalFormForCharacter(char) \
-            for char in components])
-
-        if components:
-            currentResultRadicals = self.charInfo.getComponentsWithResults(
-                components,
-                includeEquivalentRadicalForms=includeEquivalentRadicalForms,
-                includeSimilarCharacters=includeSimilarCharacters)
-        else:
-            currentResultRadicals = None
-
-        htmlList = []
-        htmlList.append('<table class="component">')
-
-        strokeCountList = componentsByStrokeCount.keys()
-        strokeCountList.sort()
-        for strokeCount in strokeCountList:
-            htmlList.append('<tr><th>%d</th><td>' % strokeCount)
-            for form in sorted(componentsByStrokeCount[strokeCount]):
-                if form in selected:
-                    formClass = 'selectedComponent'
-                elif currentResultRadicals != None \
-                    and form not in currentResultRadicals:
-                    formClass = 'zeroResultComponent'
-                else:
-                    formClass = ''
-
-                formBase64 = util.encodeBase64(form)
-                htmlList.append(
-                    '<a class="character" href="#component(%s)">' % formBase64 \
-                    + '<span class="component %s" id="c%s">%s</span>' \
-                        % (formClass, formBase64, form) \
-                    + '</a>')
-            htmlList.append('</td></tr>')
-        htmlList.append('</table>')
-
-        return "\n".join(htmlList)
-
-    def getComponentSearchResult(self, components,
-        includeEquivalentRadicalForms=False, includeSimilarCharacters=False):
-        """Gets a list of characters containing the given components."""
-        chars = self.charInfo.getCharactersForComponents(components,
-            includeEquivalentRadicalForms=includeEquivalentRadicalForms,
-            includeSimilarCharacters=includeSimilarCharacters)
-
-        if chars:
-            charLinks = []
-            for char in chars:
-                charLinks.append(
-                    '<a class="character" href="#lookup(%s)">%s</a>' \
-                        % (util.encodeBase64(char), char))
-            html = '<span class="character">%s</span>' % ' '.join(charLinks)
-        else:
-            html = '<p class="meta">%s</p>' % gettext('No entries')
-
-        return html, len(chars)
-
-    def getRadicalTable(self):
-        """Gets a table of Kangxi radicals, sorted by radical index."""
-        htmlList = []
-        htmlList.append('<table id="radicaltable" class="radical">')
-
-        lastStrokeCount = None
-        radicalForms = self.charInfo.getKangxiRadicalForms()
-        radicalEntryDict = self.charInfo.getRadicalDictionaryEntries()
-
-        for radicalIdx in range(1, 215):
-            mainForm, strokeCount, variants, _ = radicalForms[radicalIdx]
-
-            if lastStrokeCount != strokeCount:
-                lastStrokeCount = strokeCount
-                htmlList.append(
-                    '<tr class="strokeCount" id="strokecount%d">' \
-                        % strokeCount \
-                    + '<td colspan="3"><h2>%s</h2></td>' \
-                        % (ngettext('%(strokes)d stroke', '%(strokes)d strokes',
-                            strokeCount) % {'strokes': strokeCount})
-                    + '</tr>')
-
-            htmlList.append(
-                '<tr class="radicalEntry" id="radical%d">' \
-                    % radicalIdx \
-                + '<td class="radicalIndex">%s</td>' % radicalIdx)
-
-            if variants:
-                htmlList.append('<td class="radical">' \
-                    + '<a class="character" href="#radical(%s)">' % radicalIdx \
-                    + '<span class="radical">%s</span><br/>' % mainForm \
-                    + '<span class="radicalVariant">%s</span>' \
-                        % ''.join(variants) \
-                    + '</a></td>')
-            else:
-                htmlList.append('<td class="radical">' \
-                    + '<a class="character" href="#radical(%s)">' % radicalIdx \
-                    + '<span class="radical">%s</span><br/>' % mainForm \
-                    + '</a></td>')
-
-            if radicalIdx in radicalEntryDict:
-                _, meaning = radicalEntryDict[radicalIdx] # TODO remove reading
-                htmlList.append(
-                    '<td class="translation">%s</td>' % meaning)
-            else:
-                htmlList.append('<td class="translation"></td>')
-
-            htmlList.append('</tr>')
-
-        htmlList.append('</table>')
-
-        # TODO
-        radicalEntries = {}
-        for radicalIdx in range(1, 215):
-            if radicalIdx in radicalEntryDict:
-                _, meaning = radicalEntryDict[radicalIdx] # TODO remove reading
-            else:
-                meaning = None
-            _, _, _, representatives = radicalForms[radicalIdx]
-            radicalEntries[radicalIdx] = (representatives, meaning)
-
-        return "\n".join(htmlList), radicalEntries
-
-    def getCharacterForRadical(self, radicalIndex, includeAllComponents=False):
-        """Gets a list of characters classified under the given radical."""
-        # group by residual stroke count
-        characterGroups = self.charInfo.getCharactersForKangxiRadicalIndex(
-            radicalIndex, includeAllComponents=includeAllComponents)
-
-        htmlList = []
-
-        # show main radical form
-        htmlList.append('<h3>%s</h3>' \
-            % (gettext('Radical %(radical_index)d') \
-                % {'radical_index': radicalIndex}))
-
-        charLinks = []
-        for strokeCount in sorted(characterGroups['radical'].keys()):
-            for char in sorted(characterGroups['radical'][strokeCount]):
-                charLinks.append('<span class="character">' \
-                    + '<a class="character" href="#lookup(%s)">%s</a>' \
-                        % (util.encodeBase64(char), char) \
-                    + '</span>')
-
-        htmlList.append(' '.join(charLinks))
-
-        radicalEntryDict = self.charInfo.getRadicalDictionaryEntries()
-        _, meaning = radicalEntryDict.get(radicalIndex, (None, None))
-        if meaning:
-            htmlList.append(' <span class="translation">%s</span>' % meaning)
-
-        radicalForms = self.charInfo.getKangxiRadicalForms()
-        _, strokeCount, _, _ = radicalForms[radicalIndex]
-        if strokeCount:
-            htmlList.append(' <span class="strokecount">(%s)</span>' \
-                % (ngettext('%(strokes)d stroke', '%(strokes)d strokes',
-                    strokeCount) % {'strokes': strokeCount}))
-
-
-        htmlList.append('<h3>%s</h3>' % gettext('Characters'))
-
-        # list sorted by residual stroke count
-        if not characterGroups[None]:
-            htmlList.append('<span class="meta">%s</span>' \
-                % gettext('no results found for the selected character domain'))
-        else:
-            htmlList.append('<table class="searchResult">')
-            for strokeCount in sorted(characterGroups[None].keys()):
-                if type(strokeCount) not in (type(0), type(0L)):
-                    # sort out non stroke count groups
-                    continue
-
-                htmlList.append('<tr>' \
-                    + '<th class="strokeCount">+%s</th><td>' % strokeCount)
-                charLinks = []
-                for char in sorted(characterGroups[None][strokeCount]):
-                    charLinks.append('<span class="character">' \
-                        + '<a class="character" href="#lookup(%s)">%s</a>' \
-                            % (util.encodeBase64(char), char) \
-                        + '</span>')
-                htmlList.append(' '.join(charLinks))
-
-                htmlList.append('</td></tr>')
-
-            # Add characters without stroke count information
-            if None in characterGroups[None]:
-                htmlList.append('<tr>' \
-                    + '<th class="strokeCount">%s</th><td>' % gettext('Unknown'))
-                charLinks = []
-                for char in sorted(characterGroups[None][None]):
-                    charLinks.append('<span class="character">' \
-                        + '<a class="character" href="#lookup(%s)">%s</a>' \
-                            % (util.encodeBase64(char), char) \
-                        + '</span>')
-                htmlList.append(' '.join(charLinks))
-
-                htmlList.append('</td></tr>')
-
-            htmlList.append('</table>')
-
-        return "\n".join(htmlList)

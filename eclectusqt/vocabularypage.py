@@ -36,8 +36,6 @@ from PyKDE4.kio import KFileDialog
 from eclectusqt.forms import VocabularyPageUI
 from eclectusqt import util
 
-from libeclectus import characterinfo
-
 class BaseExporter:
     DEFAULT_FILE_NAME = None
     FILE_TYPES = ['*']
@@ -428,6 +426,7 @@ class VocabularyPage(QWidget, VocabularyPageUI.Ui_Form):
 
     def __init__(self, mainWindow, renderThread, pluginConfig=None):
         QWidget.__init__(self, mainWindow)
+        self.mainWindow = mainWindow
         self.renderThread = renderThread
         self.pluginConfig = pluginConfig
 
@@ -435,6 +434,9 @@ class VocabularyPage(QWidget, VocabularyPageUI.Ui_Form):
         self.setupUi(self)
 
         self.vocabularyChanged = None # None -> not loaded
+        self.language = None
+        self.reading = None
+        self.translationLanguage = None
 
         self.vocabularyModel = VocabularyModel(self)
         self.vocabularyListView.setModel(self.vocabularyModel)
@@ -442,11 +444,13 @@ class VocabularyPage(QWidget, VocabularyPageUI.Ui_Form):
         self.exportHistoryButton.setEnabled(False)
 
         # connect to main window
-        self.connect(mainWindow, SIGNAL("writeSettings()"),
+        self.connect(self.mainWindow, SIGNAL("settingsChanged()"),
+            self.slotSettingsChanged)
+        self.connect(self.mainWindow, SIGNAL("writeSettings()"),
             self.writeSettings)
-        #self.connect(mainWindow, SIGNAL("pageRequested(const QString &)"),
+        #self.connect(self.mainWindow, SIGNAL("pageRequested(const QString &)"),
             #self.slotPageRequested)
-        self.connect(mainWindow,
+        self.connect(self.mainWindow,
             SIGNAL("vocabularyAdded(const QString &, const QString &, const QString &, const QString &)"),
             self.slotVocabularyAdded)
 
@@ -558,14 +562,10 @@ class VocabularyPage(QWidget, VocabularyPageUI.Ui_Form):
             'Pronunciation': unicode(pronunciation),
             'Translation': unicode(translation), 'AudioFile': unicode(audio)}
 
-        charInfo = self.renderThread.getObjectInstance(
-            characterinfo.CharacterInfo)
-        entry['HeadwordLanguage'] = charInfo.language
-        if charInfo.dictionary:
-            lang = characterinfo.CharacterInfo.DICTIONARY_TRANSLATION_LANG[
-                charInfo.dictionary] # TODO
-            entry['TranslationLanguage'] = lang
-        entry['PronunciationType'] = charInfo.reading
+        if self.language: entry['HeadwordLanguage'] = self.language
+        if self.reading: entry['PronunciationType'] = self.reading
+        if self.translationLanguage:
+            entry['TranslationLanguage'] = self.translationLanguage
 
         # add to history list
         entryIndex = self.vocabularyModel.addVocabulary(entry)
@@ -656,3 +656,12 @@ class VocabularyPage(QWidget, VocabularyPageUI.Ui_Form):
                     self.vocabularyChanged = False
                 except Exception, e:
                     print e.encode(locale.getpreferredencoding())
+
+    def slotSettingsChanged(self):
+        settings = self.mainWindow.settings()
+
+        self.language = settings.get('language', None)
+        self.reading = settings.get('reading', None)
+        # TODO implement
+        self.translationLanguage = settings.get('translationLanguage', None)
+

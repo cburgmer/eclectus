@@ -7,8 +7,9 @@ __all__ = [
     "DICTIONARY_LANG", "DICTIONARY_TRANSLATION_LANG",
     "LANGUAGE_COMPATIBLE_MAPPINGS",
     # access methods
-    "getDictionaryClasses", "getDictionaryClass", "getDictionary",
-    "getDictionaryClassForLang", "getDictionaryForLang",
+    "getDictionaryClasses", "getAvailableDictionaryNames",
+    "getDictionaryClass", "getDictionary", "getDictionaryClassForLang",
+    "getDictionaryForLang", "getDefaultDictionary",
     # dictionaries
     "ExtendedEDICT", "ExtendedCEDICTGR", "ExtendedCEDICT", "ExtendedHanDeDict",
     "ExtendedCFDICT"]
@@ -21,7 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.sql import and_, or_, func
 
 from cjklib.dictionary import EDICT, CEDICT, CEDICTGR, HanDeDict, CFDICT
-from cjklib.dictionary import search, format, entry
+from cjklib.dictionary import search, format, entry, EDICTStyleDictionary
 from cjklib.reading import ReadingFactory
 from cjklib import exception
 from cjklib.util import cross
@@ -29,6 +30,8 @@ from cjklib.dbconnector import getDBConnector
 
 from libeclectus.chardb import CharacterDB
 from libeclectus import util
+
+search.setDefaultWildcards(singleCharacter='?', multipleCharacters='*')
 
 DICTIONARY_LANG = {'HanDeDict': 'zh-cmn', 'CFDICT': 'zh-cmn',
     'CEDICT': 'zh-cmn', 'CEDICTGR': 'zh-cmn-Hant', 'EDICT': 'ja'}
@@ -437,8 +440,6 @@ class HeadwordEntityReading(HeadwordEntity):
             entities = [entity for entity in convertedEntities if entity != ' ']
 
             if len(entities) != len(headwordStr):
-                print entities
-                print headwordStr
                 raise exception.ConversionError(
                     "Mismatch of headword/reading length: '%s' / '%s'"
                         % (headwordStr, "', '".join(entities)))
@@ -677,12 +678,11 @@ class HeadwordVariant(search.Exact):
 
     def setDictionaryInstance(self, dictInstance):
         search.Exact.setDictionaryInstance(self, dictInstance)
-        self._characterDB = CharacterDB(language=self.language,
-            characterDomain='Unicode', dbConnectInst=dictInstance.db)
+        self.charDB = dictInstance.charDB
 
     # TODO cached
     def _getPossibleHeadwordVariants(self, headwordStr):
-        singleCharacterVariants = [self._characterDB.getCharacterVariants(char)
+        singleCharacterVariants = [self.charDB.getCharacterVariants(char)
             for char in headwordStr]
 
         variants = set(map(''.join, cross(*singleCharacterVariants)))
@@ -708,12 +708,11 @@ class HeadwordSimilar(search.Exact):
 
     def setDictionaryInstance(self, dictInstance):
         search.Exact.setDictionaryInstance(self, dictInstance)
-        self._characterDB = CharacterDB(language=self.language,
-            characterDomain='Unicode', dbConnectInst=dictInstance.db)
+        self.charDB = dictInstance.charDB
 
     # TODO cached
     def _getPossibleHeadwordSimilars(self, headwordStr):
-        singleCharacterSimilars = [self._characterDB.getCharacterSimilars(char)
+        singleCharacterSimilars = [self.charDB.getCharacterSimilars(char)
             for char in headwordStr]
 
         variants = set(map(''.join, cross(*singleCharacterSimilars)))
@@ -759,6 +758,8 @@ class _ExtendedDictionarySupport(object):
         self.language = options.get('language',
             DICTIONARY_DEFAULT_LANG[self.PROVIDES])
 
+        self.charDB = CharacterDB(language=self.language, **options)
+
         ignoreIllegalSettings = options.get('ignoreIllegalSettings', False)
         reading = options.get('reading', None)
         if (reading
@@ -771,6 +772,7 @@ class _ExtendedDictionarySupport(object):
 
 
         self.reading = reading or self.READING
+        self._readingFactory = ReadingFactory(dbConnectInst=self.db)
 
         if 'headwordEntitiesSearchStrategy' in options:
             self.headwordEntitiesSearchStrategy \
@@ -844,6 +846,24 @@ class _ExtendedDictionarySupport(object):
                 orderBy[orderBy.index('Weight')] =  orderByWeight
             else:
                 orderBy.remove('Weight')
+
+    def _getReadingOptions(self, string):
+        """
+        Guesses the reading options using the given string to support reading
+        dialects.
+
+        @type string: string
+        @param string: reading string
+        @rtype: dict
+        @returns: reading options
+        """
+        # guess reading parameters
+        if self.reading:
+            classObj = self._readingFactory.getReadingOperatorClass(
+                self.reading)
+            if hasattr(classObj, 'guessReadingDialect'):
+                return classObj.guessReadingDialect(string)
+        return {}
 
     def _getHeadwordEntitiesSearch(self, headwordStr, readingStr, **options):
         dictionaryTable = self.db.tables[self.DICTIONARY_TABLE]
@@ -919,6 +939,9 @@ class _ExtendedDictionarySupport(object):
 
     def getForSimilarReading(self, readingStr, limit=None, orderBy=None,
         **options):
+
+        options.update(self._getReadingOptions(readingStr))
+
         if self.readingSimilarSearchStrategy is None:
             return []
         # TODO raises conversion error
@@ -1124,7 +1147,10 @@ class _ExtendedCEDICTStyleSupport(_ExtendedDictionarySupport):
                 self.headwordVariantSearchStrategy.getMatchFunction(
                     headwordStr)))
 
-        return clauses, filters
+        if None in clauses:
+            return None, None
+        else:
+            return clauses, filters
 
     def _getHeadwordSimilarSearch(self, headwordStr, **options):
         dictionaryTable = self.db.tables[self.DICTIONARY_TABLE]
@@ -1144,30 +1170,14 @@ class _ExtendedCEDICTStyleSupport(_ExtendedDictionarySupport):
                 self.headwordSimilarSearchStrategy.getMatchFunction(
                     headwordStr)))
 
-        return clauses, filters
+        if None in clauses:
+            return None, None
+        else:
+            return clauses, filters
 
 
-class _EDICTDictionaryDefaults(object):
-    DEFAULT_SEARCH_STRATEGIES = {
-            'headwordSearchStrategy': search.Wildcard,
-            'readingSearchStrategy': search.Wildcard,
-            'translationSearchStrategy': search.SimpleWildcardTranslation,
-            }
-
-    @classmethod
-    def _setDefaults(cls, options, userdefaults=None):
-        userdefaults = userdefaults or {}
-        defaults = cls.DEFAULT_SEARCH_STRATEGIES.copy()
-        defaults.update(userdefaults)
-        for strategy in defaults:
-            if strategy not in options:
-                options[strategy] = defaults[strategy](singleCharacter='?',
-                    multipleCharacters='*')
-
-
-class ExtendedEDICT(_EDICTDictionaryDefaults, EDICT, _ExtendedDictionarySupport):
+class ExtendedEDICT(EDICT, _ExtendedDictionarySupport):
     def __init__(self, **options):
-        self._setDefaults(options)
         options['entryFactory'] = EDICTEntry() # TODO
         EDICT.__init__(self, **options)
         _ExtendedDictionarySupport.__init__(self, **options)
@@ -1177,17 +1187,9 @@ class ExtendedEDICT(_EDICTDictionaryDefaults, EDICT, _ExtendedDictionarySupport)
         return EDICT._search(self, whereClause, filters, limit, orderBy)
 
 
-class ExtendedCEDICTGR(_EDICTDictionaryDefaults, CEDICTGR,
-    _ExtendedDictionarySupport):
+class ExtendedCEDICTGR(CEDICTGR, _ExtendedDictionarySupport):
     # TODO similar reading support for CEDICTGR
     def __init__(self, **options):
-        defaults = {
-            'readingSearchStrategy': search.SimpleWildcardReading,
-            'translationSearchStrategy': search.CEDICTWildcardTranslation,
-            'headwordEntitiesSearchStrategy': HeadwordEntityReading
-            }
-        self._setDefaults(options, defaults)
-
         options['entryFactory'] = EDICTEntry() # TODO
         CEDICTGR.__init__(self, **options)
         _ExtendedDictionarySupport.__init__(self, **options)
@@ -1196,25 +1198,20 @@ class ExtendedCEDICTGR(_EDICTDictionaryDefaults, CEDICTGR,
         self._checkOrderByWeight(orderBy)
         return CEDICTGR._search(self, whereClause, filters, limit, orderBy)
 
+    def getForReading(self, readingStr, limit=None, orderBy=None, **options):
+        options.update(self._getReadingOptions(readingStr))
+        return CEDICTGR.getForReading(self, readingStr, limit=limit,
+            orderBy=orderBy, **options)
 
-class _CEDICTDictionaryDefaults(_EDICTDictionaryDefaults):
-    DEFAULT_SEARCH_STRATEGIES = {
-            'headwordSearchStrategy': search.Wildcard,
-            'readingSearchStrategy': search.TonelessWildcardReading,
-            'mixedReadingSearchStrategy': search.MixedTonelessWildcardReading,
-            'translationSearchStrategy': search.SimpleWildcardTranslation,
-            }
+    def getFor(self, searchStr, limit=None, orderBy=None, **options):
+        options.update(self._getReadingOptions(searchStr))
+        return CEDICTGR.getFor(self, searchStr, limit=limit, orderBy=orderBy,
+            **options)
 
+
+class _CEDICTDictionaryDefaults():
     @classmethod
-    def _setDefaults(cls, options, userdefaults=None):
-        userdefaults = userdefaults or {}
-        defaults = cls.DEFAULT_SEARCH_STRATEGIES.copy()
-        defaults.update(userdefaults)
-        for strategy in defaults:
-            if strategy not in options:
-                options[strategy] = defaults[strategy](singleCharacter='?',
-                    multipleCharacters='*')
-
+    def _setDefaults(cls, options):
         if 'entryFactory' not in options:
             #options['entryFactory'] = HeadwordAlternative()
             options['entryFactory'] = CEDICTEntry()
@@ -1231,10 +1228,7 @@ class _CEDICTDictionaryDefaults(_EDICTDictionaryDefaults):
 class ExtendedCEDICT(_CEDICTDictionaryDefaults, CEDICT,
     _ExtendedCEDICTStyleSupport):
     def __init__(self, **options):
-        defaults = {
-            'translationSearchStrategy': search.CEDICTWildcardTranslation
-            }
-        self._setDefaults(options, defaults)
+        self._setDefaults(options)
 
         CEDICT.__init__(self, **options)
         _ExtendedCEDICTStyleSupport.__init__(self, **options)
@@ -1243,14 +1237,21 @@ class ExtendedCEDICT(_CEDICTDictionaryDefaults, CEDICT,
         self._checkOrderByWeight(orderBy)
         return CEDICT._search(self, whereClause, filters, limit, orderBy)
 
+    def getForReading(self, readingStr, limit=None, orderBy=None, **options):
+        options.update(self._getReadingOptions(readingStr))
+        return CEDICT.getForReading(self, readingStr, limit=limit,
+            orderBy=orderBy, **options)
+
+    def getFor(self, searchStr, limit=None, orderBy=None, **options):
+        options.update(self._getReadingOptions(searchStr))
+        return CEDICT.getFor(self, searchStr, limit=limit, orderBy=orderBy,
+            **options)
+
 
 class ExtendedHanDeDict(_CEDICTDictionaryDefaults, HanDeDict,
     _ExtendedCEDICTStyleSupport):
     def __init__(self, **options):
-        defaults = {
-            'translationSearchStrategy': search.HanDeDictWildcardTranslation
-            }
-        self._setDefaults(options, defaults)
+        self._setDefaults(options)
 
         HanDeDict.__init__(self, **options)
         _ExtendedCEDICTStyleSupport.__init__(self, **options)
@@ -1259,14 +1260,21 @@ class ExtendedHanDeDict(_CEDICTDictionaryDefaults, HanDeDict,
         self._checkOrderByWeight(orderBy)
         return HanDeDict._search(self, whereClause, filters, limit, orderBy)
 
+    def getForReading(self, readingStr, limit=None, orderBy=None, **options):
+        options.update(self._getReadingOptions(readingStr))
+        return HanDeDict.getForReading(self, readingStr, limit=limit, orderBy=orderBy,
+            **options)
+
+    def getFor(self, searchStr, limit=None, orderBy=None, **options):
+        options.update(self._getReadingOptions(searchStr))
+        return HanDeDict.getFor(self, searchStr, limit=limit, orderBy=orderBy,
+            **options)
+
 
 class ExtendedCFDICT(_CEDICTDictionaryDefaults, CFDICT,
     _ExtendedCEDICTStyleSupport):
     def __init__(self, **options):
-        defaults = {
-            'translationSearchStrategy': search.HanDeDictWildcardTranslation
-            }
-        self._setDefaults(options, defaults)
+        self._setDefaults(options)
 
         CFDICT.__init__(self, **options)
         _ExtendedCEDICTStyleSupport.__init__(self, **options)
@@ -1274,6 +1282,16 @@ class ExtendedCFDICT(_CEDICTDictionaryDefaults, CFDICT,
     def _search(self, whereClause, filters, limit, orderBy):
         self._checkOrderByWeight(orderBy)
         return CFDICT._search(self, whereClause, filters, limit, orderBy)
+
+    def getForReading(self, readingStr, limit=None, orderBy=None, **options):
+        options.update(self._getReadingOptions(readingStr))
+        return CFDICT.getForReading(self, readingStr, limit=limit,
+            orderBy=orderBy, **options)
+
+    def getFor(self, searchStr, limit=None, orderBy=None, **options):
+        options.update(self._getReadingOptions(searchStr))
+        return CFDICT.getFor(self, searchStr, limit=limit, orderBy=orderBy,
+            **options)
 
 
 class PseudoDictionary(object):
@@ -1304,7 +1322,7 @@ class PseudoDictionary(object):
 
     def __init__(self, language, characterDomain=None, reading=None,
         columnFormatStrategies=None, entryFactory=None, dbConnectInst=None,
-        ignoreIllegalSettings=False):
+        ignoreIllegalSettings=False, **options):
 
         if language not in self.SUPPORTED_LANG:
             raise ValueError("Unknown language '%s'" % language)
@@ -1328,7 +1346,7 @@ class PseudoDictionary(object):
 
         self.db = dbConnectInst or getDBConnector()
         self._readingFactory = ReadingFactory(dbConnectInst=self.db)
-        self._characterDB = CharacterDB(language=self.language,
+        self.charDB = CharacterDB(language=self.language,
             characterDomain=characterDomain, dbConnectInst=self.db,
             ignoreIllegalSettings=ignoreIllegalSettings)
 
@@ -1364,7 +1382,7 @@ class PseudoDictionary(object):
 
         char = headwordStr
         try:
-            readings = self._characterDB.getReadingForCharacter(char,
+            readings = self.charDB.getReadingForCharacter(char,
                 self.reading)
         except (exception.ConversionError, exception.UnsupportedError):
             readings = []
@@ -1414,7 +1432,7 @@ class PseudoDictionary(object):
 
         for readingEntity in self._exactReading(readingStr, **options):
             try:
-                chars = self._characterDB.getCharactersForReading(
+                chars = self.charDB.getCharactersForReading(
                     readingEntity, self.reading)
                 entries.extend([(char, readingEntity) for char in chars])
             except (ValueError, exception.ConversionError):
@@ -1476,7 +1494,7 @@ class PseudoDictionary(object):
 
         for readingEntity in self._similarReading(readingStr, **options):
             try:
-                chars = self._characterDB.getCharactersForReading(
+                chars = self.charDB.getCharactersForReading(
                     readingEntity, self.reading)
                 entries.extend([(char, readingEntity) for char in chars])
             except (ValueError, exception.ConversionError):
@@ -1492,7 +1510,7 @@ class PseudoDictionary(object):
             if util.getCJKScriptClass(char) != 'Han':
                 continue
             try:
-                readings = self._characterDB.getReadingForCharacter(char,
+                readings = self.charDB.getReadingForCharacter(char,
                     self.reading)
             except (exception.ConversionError, exception.UnsupportedError):
                 readings = []
@@ -1509,11 +1527,11 @@ class PseudoDictionary(object):
             return []
         else:
             return self._format([(char, None) for char
-                in self._characterDB.getCharacterVariants(headwordStr)])
+                in self.charDB.getCharacterVariants(headwordStr)])
 
     def getSimilarsForHeadword(self, headwordStr, **options):
         if len(headwordStr) != 1:
             return []
         else:
             return self._format([(char, None) for char
-                in self._characterDB.getCharacterSimilars(headwordStr)])
+                in self.charDB.getCharacterSimilars(headwordStr)])

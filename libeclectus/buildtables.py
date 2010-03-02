@@ -1008,7 +1008,7 @@ class SwacChiBalmHsk1Builder(SwacAudioCollectionBuilder):
     """
     Builds an index on the chi-balm-hsk1 audio collection.
     """
-    PROVIDES = 'Pronunciation_zh_cmn'
+    PROVIDES = 'Pronunciation_Pinyin'
 
     BASE_DIRECTORY_NAME = 'chi-balm-hsk1_ogg'
 
@@ -1017,7 +1017,7 @@ class SwacCmnCaenTanBuilder(SwacAudioCollectionBuilder):
     """
     Builds an index on the cmn-caen-tan audio collection.
     """
-    PROVIDES = 'Pronunciation_zh_cmn'
+    PROVIDES = 'Pronunciation_Pinyin'
 
     BASE_DIRECTORY_NAME = 'cmn-caen-tan_ogg'
 
@@ -1120,7 +1120,7 @@ class ChineseLessonsComCantonesePronunciation(GlobbingPronunciationBuilder):
     Builds an index on pronunciation files for Cantonese provided by
     chinese-lessions.com.
     """
-    PROVIDES = "Pronunciation_zh_yue"
+    PROVIDES = "Pronunciation_CantoneseYale"
     DEPENDS = ['CantoneseYaleSyllables']
 
     BASE_DIRECTORY_NAME = "chineselessionscom_yue"
@@ -1154,7 +1154,7 @@ class ChineseLessonsComMandarinPronunciation(GlobbingPronunciationBuilder):
     Builds an index on pronunciation files for Mandarin provided by
     chinese-lessions.com.
     """
-    PROVIDES = "Pronunciation_zh_cmn"
+    PROVIDES = "Pronunciation_Pinyin"
     DEPENDS = ['PinyinSyllables']
 
     BASE_DIRECTORY_NAME = "chineselessionscom_cmn"
@@ -1195,13 +1195,13 @@ Example: \"%prog build allAvail\""""
             'KangxiRadicalTable', 'RadicalNames_zh_cmn',
             'RadicalTable_zh_cmn__de', 'RadicalTable_zh_cmn__en',
             'KangxiRadicalStrokeCount', 'EDICT', 'CEDICT', 'CEDICTGR', 'CFDICT',
-            'HanDeDict', 'UpdateVersion', 'Pronunciation_zh_cmn',
-            'Pronunciation_zh_yue', 'JISX0208Set', 'JISX0208_0213Set',
+            'HanDeDict', 'UpdateVersion', 'Pronunciation_Pinyin',
+            'Pronunciation_CantoneseYale', 'JISX0208Set', 'JISX0208_0213Set',
             'EduTwIndex'],
         'base': ['SimilarCharacters', 'KangxiRadicalTable',
             'KangxiRadicalStrokeCount', 'RadicalTable_zh_cmn__en',
             'EduTwIndex'],
-        'zh-cmn': ['RadicalNames_zh_cmn', 'Pronunciation_zh_cmn'],
+        'zh-cmn': ['RadicalNames_zh_cmn', 'Pronunciation_Pinyin'],
         'ja': ['RadicalTable_ja__en', 'JISX0208Set', 'JISX0208_0213Set'],
         'EDICT_related': ['UpdateVersion'],
         'CEDICT_related': ['UpdateVersion'],

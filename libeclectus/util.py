@@ -18,7 +18,6 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 """
 
-import gettext
 import base64
 import os.path
 
@@ -143,24 +142,6 @@ def fontHasChar(fontFamily, char):
         _currentFontMetrics = QFontMetrics(font)
     return _currentFontMetrics.inFont(QString(char).at(0))
 
-# i18n
-
-def getLocaleDir():
-    base = os.path.dirname(os.path.abspath(__file__))
-    localeDir = os.path.join(base, "locale")
-    if not os.path.exists(localeDir):
-        localeDir = "/usr/share/locale"
-    return localeDir
-
-def getTranslation(localLanguage):
-    if localLanguage:
-        t = gettext.translation('libeclectus', getLocaleDir(),
-            languages=[localLanguage], fallback=True)
-    else:
-        t = gettext.translation('libeclectus', getLocaleDir(),
-            fallback=True)
-    return t
-
 # script classes
 
 UNICODE_SCRIPT_CLASSES = {'Han': [('2E80', '2E99'), ('2E9B', '2EF3'),
@@ -214,6 +195,18 @@ def getCJKScriptClass(char):
 
 # database
 
+def getDatabaseConfiguration(databaseUrl=None):
+    configuration = {}
+    if databaseUrl:
+        configuration['sqlalchemy.url'] = databaseUrl
+        if databaseUrl.startswith('sqlite://'):
+            configuration['attach'] = ([getDatabaseUrl()]
+                + getAttachableDatabases())
+    else:
+        configuration['sqlalchemy.url'] = getDatabaseUrl()
+        configuration['attach'] = getAttachableDatabases()
+    return configuration
+
 def getDatabaseUrl():
     try:
         from pkg_resources import Requirement, resource_filename
@@ -242,3 +235,22 @@ def getAttachableDatabases():
     paths.append('cjklib')
 
     return paths
+
+# decorators
+
+def attr(attr, value=True):
+    def newFunc(func):
+        setattr(func, attr, value)
+        return func
+    return newFunc
+
+def cachedproperty(fget):
+    def fget_wrapper(self):
+        try: return fget_wrapper._cached
+        except AttributeError:
+            fget_wrapper._cached = value = fget(self)
+            return value
+    def fdel(self):
+        try: del fget_wrapper._cached
+        except AttributeError: pass
+    return property(fget_wrapper, fdel=fdel, doc=fget.__doc__)

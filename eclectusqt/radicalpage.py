@@ -29,8 +29,7 @@ from PyKDE4.kdecore import i18n
 from eclectusqt.forms import RadicalPageUI
 from eclectusqt import util
 
-from libeclectus import htmlview
-from libeclectus import characterinfo
+from libeclectus.radicalview import RadicalView
 from libeclectus.util import decodeBase64
 
 class RadicalPage(QWidget, RadicalPageUI.Ui_Form):
@@ -63,8 +62,11 @@ for(var i = 0; i < trs.length; i++)
 }
 """ # TODO use _go function instead of workaround with "alert"
 
+    MAXIMUM_STROKE_COUNT = 17
+
     def __init__(self, mainWindow, renderThread, pluginConfig=None):
         QWidget.__init__(self, mainWindow)
+        self.mainWindow = mainWindow
         self.renderThread = renderThread
         self.pluginConfig = pluginConfig
 
@@ -73,11 +75,18 @@ for(var i = 0; i < trs.length; i++)
 
         self.radicalView.setPage(util.HandyWebpage(self))
 
+        self.databaseUrl = None
         if self.pluginConfig:
             self.includeAllRadicals = self.pluginConfig.readEntry(
                 "Radical include all", str(False)) != "False"
+            self.databaseUrl = util.readConfigString(self.pluginConfig,
+                "Update database url", None)
         else:
             self.includeAllRadicals = True
+
+        if not self.databaseUrl:
+            self.databaseUrl = unicode('sqlite:///'
+                + util.getLocalData('dictionaries.db'))
 
         self.nonKangxiRadicalButton.setChecked(self.includeAllRadicals)
         self.radicalOptions.setCurrentIndex(0)
@@ -89,15 +98,17 @@ for(var i = 0; i < trs.length; i++)
         self.currentRadicalIndex = None
         self.currentSelectedEntry = None
         self.radicalEntryDict = None
+        self.language = None
+        self.characterDomain = None
 
         # connect to main window
-        self.connect(mainWindow, SIGNAL("writeSettings()"),
+        self.connect(self.mainWindow, SIGNAL("settingsChanged()"),
+            self.slotSettingsChanged)
+        self.connect(self.mainWindow, SIGNAL("writeSettings()"),
             self.writeSettings)
 
         self.connect(self.renderThread, SIGNAL("jobFinished"),
             self.contentRendered)
-        self.connect(self.renderThread, SIGNAL("objectCreated"),
-            self.objectCreated)
 
         # connect to the radical table widgets
         self.connect(self.gotoEdit, SIGNAL("textChanged(const QString &)"),
@@ -124,11 +135,12 @@ for(var i = 0; i < trs.length; i++)
         self.groupRadicalFormsButton.setVisible(False) # TODO implement functionality
 
         self.initialised = False
-        self.maximumStrokeCount = None
 
     def showEvent(self, event):
         if not self.initialised:
             self.initialised = True
+
+            self.slotSettingsChanged()
 
             self.connect(self.radicalView, SIGNAL("loadFinished(bool)"),
 
@@ -140,14 +152,12 @@ for(var i = 0; i < trs.length; i++)
             self.groupRadicalFormsButton.setIcon(KIcon('format-list-ordered'))
 
             self.radicalView.setHtml(i18n('Loading...'))
-            self.renderThread.enqueue(htmlview.HtmlView, 'getRadicalTable')
-            self.renderThread.enqueue(characterinfo.CharacterInfo,
-                'getRadicalForms')
+            self.renderThread.enqueue(RadicalView, 'getRadicalTable')
 
         QWidget.showEvent(self, event)
 
     def showRadicalTable(self, show=None):
-        self.renderThread.enqueue(htmlview.HtmlView, 'getRadicalTable')
+        self.renderThread.enqueue(RadicalView, 'getRadicalTable')
         self.radicalOptions.setCurrentIndex(0)
         self.gotoEdit.setFocus()
 
@@ -162,7 +172,7 @@ for(var i = 0; i < trs.length; i++)
         # save scroll value of the character view in radical table
         self.radicalCharactersViewRelativeScroll = 0
 
-        self.renderThread.enqueue(htmlview.HtmlView, 'getCharacterForRadical',
+        self.renderThread.enqueue(RadicalView, 'getCharacterForRadical',
             radicalIndex=self.currentRadicalIndex,
             includeAllComponents=self.includeAllRadicals)
 
@@ -178,7 +188,7 @@ for(var i = 0; i < trs.length; i++)
                 = 1.0 * frame.scrollBarValue(Qt.Vertical) / maxScroll
         else:
             self.radicalCharactersViewRelativeScroll = 0
-        self.renderThread.enqueue(htmlview.HtmlView, 'getCharacterForRadical',
+        self.renderThread.enqueue(RadicalView, 'getCharacterForRadical',
             radicalIndex=self.currentRadicalIndex,
             includeAllComponents=self.includeAllRadicals)
 
@@ -225,8 +235,7 @@ for(var i = 0; i < trs.length; i++)
         if matchObj:
             try:
                 strokeCount = int(matchObj.group(1))
-                if not self.maximumStrokeCount \
-                    or strokeCount <= self.maximumStrokeCount:
+                if strokeCount <= self.MAXIMUM_STROKE_COUNT:
                     script = 'document.getElementById("' + 'strokecount' \
                         + str(strokeCount) + '").scrollIntoView();'
                     self.radicalView.page().mainFrame().evaluateJavaScript(
@@ -321,7 +330,7 @@ for(var i = 0; i < trs.length; i++)
                 str(self.includeAllRadicals))
 
     def contentRendered(self, id, classObject, method, args, param, content):
-        if classObject == htmlview.HtmlView and method == 'getRadicalTable':
+        if classObject == RadicalView and method == 'getRadicalTable':
             htmlCode, self.radicalEntryDict = content
             self.radicalView.setHtml('<html><head><title>Radicals</title>' \
                 + '<link rel="StyleSheet" href="file://%s" type="text/css" />' \
@@ -332,7 +341,7 @@ for(var i = 0; i < trs.length; i++)
 
             self.radicalView.page().mainFrame().evaluateJavaScript(
                 self.CLICKABLE_ROW_JAVASCRIPT)
-        elif classObject == htmlview.HtmlView \
+        elif classObject == RadicalView \
             and method == 'getCharacterForRadical':
             self.radicalView.setHtml('<html><head><title>Results</title>' \
                 + '<link rel="StyleSheet" href="file://%s" type="text/css" />' \
@@ -340,16 +349,25 @@ for(var i = 0; i < trs.length; i++)
                 + '</head>' \
                 + '<body>%s</body>' % content \
                 + '</html>')
-        elif classObject == characterinfo.CharacterInfo \
-            and method == 'getRadicalForms':
-                self.maximumStrokeCount = max([strokeCount \
-                    for _, strokeCount, _ in content.values()])
 
-    def objectCreated(self, id, classObject):
+    def slotSettingsChanged(self):
         if not self.initialised:
             return
-        if classObject == htmlview.HtmlView:
+
+        settings = self.mainWindow.settings()
+
+        language = settings.get('language', 'zh-cmn-Hans')
+        characterDomain = settings.get('characterDomain', 'Unicode')
+
+        if self.language != language or self.characterDomain != characterDomain:
+            self.renderThread.setCachedObject(RadicalView,
+                databaseUrl=self.databaseUrl, language=language,
+                characterDomain=characterDomain)
+
+            self.language = language
+            self.characterDomain = characterDomain
+
             if self.radicalView.title() == 'Radicals':
-                self.renderThread.enqueue(htmlview.HtmlView, 'getRadicalTable')
+                self.renderThread.enqueue(RadicalView, 'getRadicalTable')
             elif self.radicalView.title() == 'Results':
                 self.toggleIncludeAllRadicals(self.includeAllRadicals)

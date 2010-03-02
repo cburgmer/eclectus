@@ -34,24 +34,28 @@ from PyKDE4.kdecore import i18n
 from eclectusqt.forms import ComponentPageUI
 from eclectusqt import util
 
-from libeclectus import characterinfo
-from libeclectus import htmlview
+from libeclectus.componentview import ComponentView
 from libeclectus.util import decodeBase64
 
 class ComponentPage(QWidget, ComponentPageUI.Ui_Form):
     def __init__(self, mainWindow, renderThread, pluginConfig=None):
         QWidget.__init__(self, mainWindow)
+        self.mainWindow = mainWindow
         self.renderThread = renderThread
         self.pluginConfig = pluginConfig
 
         # set up UI
         self.setupUi(self)
 
+        self.databaseUrl = None
         if self.pluginConfig:
             self.includeSimilar = util.readConfigString(self.pluginConfig,
                 "Component include similar", str(True)) != "False"
             self.includeVariants = util.readConfigString(self.pluginConfig, 
                 "Component include variants", str(True)) != "False"
+
+            self.databaseUrl = util.readConfigString(self.pluginConfig,
+                "Update database url", None)
 
             splitterState = util.readConfigString(self.pluginConfig,
                 "Component splitter", "")
@@ -61,22 +65,26 @@ class ComponentPage(QWidget, ComponentPageUI.Ui_Form):
             self.includeSimilar = True
             self.includeVariants = True
 
+        if not self.databaseUrl:
+            self.databaseUrl = unicode('sqlite:///'
+                + util.getLocalData('dictionaries.db'))
+
         self.includeSimilarButton.setChecked(self.includeSimilar)
         self.includeVariantsButton.setChecked(self.includeVariants)
 
         self.componentViewScroll = 0
         self.selectedComponents = []
-        self.currentLanguage = None
+        self.language = None
         self.characterDomain = None
 
         # connect to main window
-        self.connect(mainWindow, SIGNAL("writeSettings()"),
+        self.connect(self.mainWindow, SIGNAL("settingsChanged()"),
+            self.slotSettingsChanged)
+        self.connect(self.mainWindow, SIGNAL("writeSettings()"),
             self.writeSettings)
 
         self.connect(self.renderThread, SIGNAL("jobFinished"),
             self.contentRendered)
-        self.connect(self.renderThread, SIGNAL("objectCreated"),
-            self.objectCreated)
 
         # connect to the widgets
         self.connect(self.includeVariantsButton, SIGNAL("clicked(bool)"),
@@ -109,7 +117,9 @@ class ComponentPage(QWidget, ComponentPageUI.Ui_Form):
             self.includeVariantsButton.setIcon(
                 QIcon(util.getIcon('radicalvariant.png')))
 
-            id = self.renderThread.enqueue(htmlview.HtmlView,
+            self.slotSettingsChanged()
+
+            id = self.renderThread.enqueue(ComponentView,
                 'getComponentSearchTable', components=[],
                 includeEquivalentRadicalForms=self.includeVariants,
                 includeSimilarCharacters=self.includeSimilar)
@@ -145,6 +155,9 @@ class ComponentPage(QWidget, ComponentPageUI.Ui_Form):
         if cmd.startswith('component'):
             char = decodeBase64(re.match('component\(([^\)]+)\)', cmd).group(1))
 
+            # map forms to reqular equivalent ones
+            char = self._equivalentFormsMap.get(char, char)
+
             if char in self.selectedComponents:
                 self.selectedComponents.remove(char)
             else:
@@ -159,16 +172,8 @@ class ComponentPage(QWidget, ComponentPageUI.Ui_Form):
         if self.selectedComponents != components:
             self.clearOldSearchJobs()
 
-            # preliminary save until the worker thread updates it
             # TODO sort components, to optimize caching
             self.selectedComponents = components
-
-            if self.selectedComponents:
-                # first turn characters into radical forms
-                id = self.renderThread.enqueue(characterinfo.CharacterInfo,
-                    'preferRadicalFormForCharacter',
-                    self.selectedComponents)
-                self.checkForJob(id, 'preferRadicalFormForCharacter')
 
             self.updateComponentView()
 
@@ -176,7 +181,7 @@ class ComponentPage(QWidget, ComponentPageUI.Ui_Form):
         # update component view
         self.componentViewScroll \
             = self.componentView.page().mainFrame().scrollBarValue(Qt.Vertical)
-        id = self.renderThread.enqueue(htmlview.HtmlView,
+        id = self.renderThread.enqueue(ComponentView,
             'getComponentSearchTable', components=self.selectedComponents,
             includeEquivalentRadicalForms=self.includeVariants,
             includeSimilarCharacters=self.includeSimilar)
@@ -184,7 +189,7 @@ class ComponentPage(QWidget, ComponentPageUI.Ui_Form):
 
         # update component result view
         if self.selectedComponents:
-            id = self.renderThread.enqueue(htmlview.HtmlView,
+            id = self.renderThread.enqueue(ComponentView,
                 'getComponentSearchResult', components=self.selectedComponents,
                 includeEquivalentRadicalForms=self.includeVariants,
                 includeSimilarCharacters=self.includeSimilar)
@@ -203,11 +208,9 @@ class ComponentPage(QWidget, ComponentPageUI.Ui_Form):
                 str(self.includeVariants))
 
     def clearOldSearchJobs(self):
-        self.renderThread.dequeueMethod(characterinfo.CharacterInfo,
-            'preferRadicalFormForCharacter')
-        self.renderThread.dequeueMethod(htmlview.HtmlView,
+        self.renderThread.dequeueMethod(ComponentView,
             'getComponentSearchTable')
-        self.renderThread.dequeueMethod(htmlview.HtmlView,
+        self.renderThread.dequeueMethod(ComponentView,
             'getComponentSearchResult')
 
     def checkForJob(self, id, method):
@@ -219,7 +222,7 @@ class ComponentPage(QWidget, ComponentPageUI.Ui_Form):
             self.doJob(id, method, self.renderThread.getCachedContentForId(id))
 
     def contentRendered(self, id, classObject, method, args, param, content):
-        if classObject == htmlview.HtmlView:
+        if classObject == ComponentView:
             self.doJob(id, method, content)
 
     def doJob(self, id, method, content):
@@ -240,21 +243,12 @@ class ComponentPage(QWidget, ComponentPageUI.Ui_Form):
                 + '<body>%s</body>' % htmlCode \
                 + '</html>')
             self.componentResultLabel.setText(i18n("%1 Results:", count))
-        elif method == 'preferRadicalFormForCharacter':
-            # TODO sort components, to optimize caching
-            self.selectedComponents = content[:]
-            self.componentEdit.setText(''.join(self.selectedComponents))
-            self.updateComponentView()
 
     def reload(self):
         self.clearOldSearchJobs()
 
         if self.selectedComponents:
-            id = self.renderThread.enqueue(characterinfo.CharacterInfo,
-                'preferRadicalFormForCharacter', self.selectedComponents)
-            self.checkForJob(id, 'preferRadicalFormForCharacter')
-
-            id = self.renderThread.enqueue(htmlview.HtmlView,
+            id = self.renderThread.enqueue(ComponentView,
                 'getComponentSearchResult', components=self.selectedComponents,
                 includeEquivalentRadicalForms=self.includeVariants,
                 includeSimilarCharacters=self.includeSimilar)
@@ -263,22 +257,31 @@ class ComponentPage(QWidget, ComponentPageUI.Ui_Form):
             self.componentResultLabel.setText(i18n("Results:"))
             self.componentResultView.setHtml('')
 
-        id = self.renderThread.enqueue(htmlview.HtmlView,
+        id = self.renderThread.enqueue(ComponentView,
             'getComponentSearchTable', components=self.selectedComponents,
             includeEquivalentRadicalForms=self.includeVariants,
             includeSimilarCharacters=self.includeSimilar)
         self.checkForJob(id, 'getComponentSearchTable')
 
-    def objectCreated(self, id, classObject):
+    def slotSettingsChanged(self):
         if not self.initialised:
             return
-        if classObject == characterinfo.CharacterInfo:
-            charInfo = self.renderThread.getObjectInstance(
-                characterinfo.CharacterInfo)
-            if not self.currentLanguage \
-                or self.currentLanguage != charInfo.language \
-                or self.characterDomain != charInfo.characterDomain:
-                self.currentLanguage = charInfo.language
-                self.characterDomain = charInfo.characterDomain
 
-                self.reload()
+        settings = self.mainWindow.settings()
+
+        language = settings.get('language', 'zh-cmn-Hans')
+        characterDomain = settings.get('characterDomain', 'Unicode')
+
+        if self.language != language or self.characterDomain != characterDomain:
+            self.renderThread.setCachedObject(ComponentView,
+                databaseUrl=self.databaseUrl, language=language,
+                characterDomain=characterDomain)
+
+            self.language = language
+            self.characterDomain = characterDomain
+
+            componentView = self.renderThread.getObjectInstance(ComponentView)
+            self._equivalentFormsMap \
+                = componentView.radicalFormEquivalentCharacterMap
+
+            self.reload()

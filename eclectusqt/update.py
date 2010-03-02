@@ -28,35 +28,71 @@ import sys
 import os
 from datetime import date, time, datetime
 
+from sqlalchemy import select
+from sqlalchemy.exceptions import OperationalError
+
 from PyQt4.QtCore import Qt, SIGNAL
 from PyQt4.QtGui import QWidget, QApplication, QCursor
+
 from PyKDE4.kdecore import ki18n, i18n, KTemporaryFile, KUrl
 from PyKDE4.kio import KIO
 from PyKDE4.kdeui import KIcon, KMessageBox, KStandardGuiItem, KDialog
 from PyKDE4.kdeui import KAction, KActionCollection
 
-from sqlalchemy.exceptions import OperationalError
-
 from cjklib import build
+from cjklib.dbconnector import getDBConnector
 
 from eclectusqt import util
-
-from libeclectus import characterinfo
-from libeclectus import htmlview
-from libeclectus.buildtables import EclectusCommandLineBuilder
-
 from eclectusqt.forms import UpdateUI
+
+from libeclectus.buildtables import EclectusCommandLineBuilder
+from libeclectus.dictionary import getAvailableDictionaryNames
+from libeclectus.util import getDatabaseConfiguration
+
+class DictionaryInfo(object):
+    def __init__(self, dbConnectInst=None, databaseUrl=None):
+        self.db = dbConnectInst or getDBConnector(
+            getDatabaseConfiguration(databaseUrl))
+
+    def getDictionaryVersions(self):
+        dictionaries = getAvailableDictionaryNames(self.db, includePseudo=False)
+
+        if self.db.hasTable('UpdateVersion'):
+            table = self.db.tables['UpdateVersion']
+            versionDict = dict(
+                [(tableName, datetime.min) for tableName in dictionaries])
+
+            versionDict.update(dict(self.db.selectRows(
+                select([table.c.TableName, table.c.ReleaseDate],
+                    table.c.TableName.in_(dictionaries)))))
+
+            return versionDict
+        else:
+            return dict([(table, None) for table in dictionaries])
+
 
 class UpdateDialog(KDialog):
     def __init__(self, mainWindow, renderThread, pluginConfig=None):
         KDialog.__init__(self, mainWindow)
         self.renderThread = renderThread
 
+        self.databaseUrl = None
+        if pluginConfig:
+            self.databaseUrl = util.readConfigString(self.pluginConfig,
+                "Update database url", None)
+
+        if not self.databaseUrl:
+            self.databaseUrl = unicode('sqlite:///'
+                + util.getLocalData('dictionaries.db'))
+
+        self.renderThread.setObject(DictionaryInfo,
+            databaseUrl=self.databaseUrl)
+
         self.setCaption(i18n("Install/Update Dictionaries"))
         self.setButtons(KDialog.ButtonCode(KDialog.Close))
         self.enableButton(KDialog.Cancel, False)
 
-        # TODO can we defer the creationg of the update widget until the dialog is shown?
+        # TODO can we defer the creation of the update widget until the dialog is shown?
         self.updateWidget = UpdateWidget(mainWindow, renderThread, pluginConfig)
         self.connect(self.updateWidget, SIGNAL("working(bool)"),
             self.slotUpdateWorking)
@@ -138,9 +174,7 @@ class UpdateDialog(KDialog):
         if not self.renderThread.hasObject(build.DatabaseBuilder):
             options = EclectusCommandLineBuilder.getDefaultOptions()
 
-            charInfo = self.renderThread.getObjectInstance(
-                characterinfo.CharacterInfo)
-            db = charInfo.db
+            db = getDBConnector(getDatabaseConfiguration(self.databaseUrl))
 
             self.renderThread.setObject(build.DatabaseBuilder, dbConnectInst=db,
                 **options)
@@ -210,8 +244,7 @@ class UpdateWidget(QWidget, UpdateUI.Ui_Form):
             self.renderingFailed)
 
     def setup(self):
-        self.renderThread.enqueue(characterinfo.CharacterInfo,
-            'getDictionaryVersions')
+        self.renderThread.enqueue(DictionaryInfo, 'getDictionaryVersions')
 
     def cancel(self):
         if self.currentJob:
@@ -442,18 +475,15 @@ class UpdateWidget(QWidget, UpdateUI.Ui_Form):
                 str(newerVersion)))
 
     def contentRendered(self, id, classObject, method, args, param, content):
-        if classObject == characterinfo.CharacterInfo \
-            and method == 'getDictionaryVersions':
-            self.setDictionaryVersions(content.copy())
+        if classObject == DictionaryInfo and method == 'getDictionaryVersions':
+            self.setDictionaryVersions(content)
 
         elif classObject == build.DatabaseBuilder and method == 'build':
-            # reload as content may change due to different database content
-            self._reloadObjects()
+            self.emit(SIGNAL("databaseChanged()"))
 
             self.installFinished(True)
         elif classObject == build.DatabaseBuilder and method == 'remove':
-            # reload as content may change due to different database content
-            self._reloadObjects()
+            self.emit(SIGNAL("databaseChanged()"))
 
             # update menu
             self.removeFinished(True)
@@ -466,17 +496,6 @@ class UpdateWidget(QWidget, UpdateUI.Ui_Form):
         elif classObject == build.DatabaseBuilder \
             and method == 'remove':
             self.removeFinished(False)
-
-    def _reloadObjects(self):
-        self.renderThread.reloadObject(characterinfo.CharacterInfo)
-
-        charInfo = self.renderThread.getObjectInstance(
-            characterinfo.CharacterInfo)
-        htmlView = self.renderThread.getObjectInstance(
-            htmlview.HtmlView)
-        htmlViewSettings = htmlView.settings()
-        self.renderThread.setCachedObject(htmlview.HtmlView, charInfo,
-            **htmlViewSettings)
 
 
 class DictionaryDownloader:
