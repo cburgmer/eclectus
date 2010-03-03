@@ -493,8 +493,8 @@ class DictionaryView:
 
     def getVariantSection(self, inputString):
         variantEntries = self._dictionary.getVariantsForHeadword(inputString)
-        variants = [e.Headword for e in variantEntries
-            if e.Headword != inputString]
+        variants = set([e.Headword for e in variantEntries
+            if e.Headword != inputString])
 
         variantLinks = []
         for variant in variants:

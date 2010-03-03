@@ -45,11 +45,14 @@ DICTIONARY_TRANSLATION_LANG = {'HanDeDict': 'de', 'CFDICT': 'fr',
     'CEDICT': 'en', 'CEDICTGR': 'en', 'EDICT': 'en'}
 """Dictionaries to translation language mapping."""
 
+DICTIONARY_COMPATIBLE_READINGS = {
+    'CEDICTGR': ['GR'],
+    }
+"""Compatible reading mappings per dictionary."""
+
 LANGUAGE_COMPATIBLE_MAPPINGS = {
-    'zh-cmn-Hant': ['Pinyin', 'WadeGiles', 'MandarinIPA'],
-    'zh-cmn-Hans': ['Pinyin', 'WadeGiles', 'MandarinIPA'],
-    'zh-yue-Hant': ['Jyutping', 'CantoneseYale'],
-    'zh-yue-Hans': ['Jyutping', 'CantoneseYale'],
+    'zh-cmn': ['Pinyin', 'WadeGiles', 'MandarinIPA'],
+    'zh-yue': ['Jyutping', 'CantoneseYale'],
     'ko': ['Hangul'],
     'ja': ['Kana']}
 """Compatible reading mappings per language."""
@@ -103,13 +106,27 @@ def getAvailableDictionaryNames(dbConnectInst=None, includePseudo=True):
 
     return available
 
-def getDictionaryLanguage(dictionaryName):
+def getDictionaryLanguage(dictionaryName, noScript=False):
     global DICTIONARY_LANG
     if dictionaryName.startswith('PSEUDO_'):
         language = dictionaryName[7:]
     else:
         language = DICTIONARY_LANG[dictionaryName]
+    if noScript and (language.endswith('Hans') or language.endswith('Hant')):
+        language = language[:-4]
     return language
+
+def getDictionaryCompatibleLanguages(dictionaryName, noScript=False):
+    global DICTIONARY_COMPATIBLE_READINGS, LANGUAGE_COMPATIBLE_MAPPINGS
+
+    if dictionaryName in DICTIONARY_COMPATIBLE_READINGS:
+        return DICTIONARY_COMPATIBLE_READINGS[dictionaryName]
+    else:
+        language = getLanguagePart(getDictionaryLanguage(dictionaryName))
+        return LANGUAGE_COMPATIBLE_MAPPINGS[language]
+
+def getLanguagePart(lang):
+    return '-'.join([code for code in lang.split('-') if len(code) < 4])
 
 _dictionaryMap = None
 def getDictionaryClass(dictionaryName):
@@ -145,13 +162,10 @@ def getDictionary(dictionaryName, dbConnectInst=None, **options):
     dbConnectInst = dbConnectInst or getDBConnector()
     if dictionaryName.startswith('PSEUDO_'):
         language = dictionaryName[7:]
-        if 'language' in options:
-            if language != options['language']:
-                raise ValueError("Invalid language specified")
-            else:
-                del options['language']
-        return PseudoDictionary(language, dbConnectInst=dbConnectInst,
-            **options)
+        if ('language' not in options or not options['language']
+            or not options['language'].startswith(language)):
+            options['language'] = language
+        return PseudoDictionary(dbConnectInst=dbConnectInst, **options)
     else:
         dictCls = getDictionaryClass(dictionaryName)
         if not dictCls.available(dbConnectInst):
@@ -673,9 +687,6 @@ class ExactMultiple(search.Exact):
 
 class HeadwordVariant(search.Exact):
     """Search strategy class matching variants of a given headword."""
-    def __init__(self, language, **options):
-        self.language = language
-
     def setDictionaryInstance(self, dictInstance):
         search.Exact.setDictionaryInstance(self, dictInstance)
         self.charDB = dictInstance.charDB
@@ -703,9 +714,6 @@ class HeadwordVariant(search.Exact):
 
 class HeadwordSimilar(search.Exact):
     """Search strategy class matching similar strings of a given headword."""
-    def __init__(self, language, **options):
-        self.language = language
-
     def setDictionaryInstance(self, dictInstance):
         search.Exact.setDictionaryInstance(self, dictInstance)
         self.charDB = dictInstance.charDB
@@ -755,21 +763,23 @@ class _ExtendedDictionarySupport(object):
         @keyword headwordSubstringSearchStrategy: headword substring search
             strategy instance
         """
-        self.language = options.get('language',
-            DICTIONARY_DEFAULT_LANG[self.PROVIDES])
+        self.language = options.get('language', None)
+        if not self.language:
+            self.language = DICTIONARY_DEFAULT_LANG[self.PROVIDES]
+        reading = options.get('reading', None)
+        if not reading: reading = cls.READING
 
-        self.charDB = CharacterDB(language=self.language, **options)
+        options['language'] = self.language
+        self.charDB = CharacterDB(**options)
 
         ignoreIllegalSettings = options.get('ignoreIllegalSettings', False)
-        reading = options.get('reading', None)
-        if (reading
-            and reading not in LANGUAGE_COMPATIBLE_MAPPINGS[self.language]):
+        compatibleReadings = getDictionaryCompatibleLanguages(self.PROVIDES)
+        if (reading and reading not in compatibleReadings):
             if ignoreIllegalSettings:
                 reading = None
             else:
                 raise ValueError("Illegal reading '%s' for language '%s'"
                     % (reading, self.language))
-
 
         self.reading = reading or self.READING
         self._readingFactory = ReadingFactory(dbConnectInst=self.db)
@@ -818,7 +828,7 @@ class _ExtendedDictionarySupport(object):
             self.headwordVariantSearchStrategy \
                 = options['headwordVariantSearchStrategy']
         else:
-            self.headwordVariantSearchStrategy = HeadwordVariant(self.language)
+            self.headwordVariantSearchStrategy = HeadwordVariant()
             """Strategy for searching headword substrings."""
         if hasattr(self.headwordVariantSearchStrategy,
             'setDictionaryInstance'):
@@ -828,7 +838,7 @@ class _ExtendedDictionarySupport(object):
             self.headwordSimilarSearchStrategy \
                 = options['headwordSimilarSearchStrategy']
         else:
-            self.headwordSimilarSearchStrategy = HeadwordSimilar(self.language)
+            self.headwordSimilarSearchStrategy = HeadwordSimilar()
             """Strategy for searching headword substrings."""
         if hasattr(self.headwordSimilarSearchStrategy,
             'setDictionaryInstance'):
@@ -1135,19 +1145,23 @@ class _ExtendedCEDICTStyleSupport(_ExtendedDictionarySupport):
         clauses = []
         filters = []
         if self.headword != 't':
-            clauses.append(self.headwordVariantSearchStrategy.getWhereClause(
-                dictionaryTable.c.HeadwordSimplified, headwordStr))
-            filters.append((['HeadwordSimplified'],
-                self.headwordVariantSearchStrategy.getMatchFunction(
-                    headwordStr)))
+            whereClause = self.headwordVariantSearchStrategy.getWhereClause(
+                dictionaryTable.c.HeadwordSimplified, headwordStr)
+            if whereClause:
+                clauses.append(whereClause)
+                filters.append((['HeadwordSimplified'],
+                    self.headwordVariantSearchStrategy.getMatchFunction(
+                        headwordStr)))
         if self.headword != 's':
-            clauses.append(self.headwordVariantSearchStrategy.getWhereClause(
-                dictionaryTable.c.HeadwordTraditional, headwordStr))
-            filters.append((['HeadwordTraditional'],
-                self.headwordVariantSearchStrategy.getMatchFunction(
-                    headwordStr)))
+            whereClause = self.headwordVariantSearchStrategy.getWhereClause(
+                dictionaryTable.c.HeadwordTraditional, headwordStr)
+            if whereClause:
+                clauses.append(whereClause)
+                filters.append((['HeadwordTraditional'],
+                    self.headwordVariantSearchStrategy.getMatchFunction(
+                        headwordStr)))
 
-        if None in clauses:
+        if not clauses:
             return None, None
         else:
             return clauses, filters
@@ -1158,19 +1172,23 @@ class _ExtendedCEDICTStyleSupport(_ExtendedDictionarySupport):
         clauses = []
         filters = []
         if self.headword != 't':
-            clauses.append(self.headwordSimilarSearchStrategy.getWhereClause(
-                dictionaryTable.c.HeadwordSimplified, headwordStr))
-            filters.append((['HeadwordSimplified'],
-                self.headwordSimilarSearchStrategy.getMatchFunction(
-                    headwordStr)))
+            whereClause = self.headwordSimilarSearchStrategy.getWhereClause(
+                dictionaryTable.c.HeadwordSimplified, headwordStr)
+            if whereClause:
+                clauses.append(whereClause)
+                filters.append((['HeadwordSimplified'],
+                    self.headwordSimilarSearchStrategy.getMatchFunction(
+                        headwordStr)))
         if self.headword != 's':
-            clauses.append(self.headwordSimilarSearchStrategy.getWhereClause(
-                dictionaryTable.c.HeadwordTraditional, headwordStr))
-            filters.append((['HeadwordTraditional'],
-                self.headwordSimilarSearchStrategy.getMatchFunction(
-                    headwordStr)))
+            whereClause = self.headwordSimilarSearchStrategy.getWhereClause(
+                dictionaryTable.c.HeadwordTraditional, headwordStr)
+            if whereClause:
+                clauses.append(whereClause)
+                filters.append((['HeadwordTraditional'],
+                    self.headwordSimilarSearchStrategy.getMatchFunction(
+                        headwordStr)))
 
-        if None in clauses:
+        if not clauses:
             return None, None
         else:
             return clauses, filters
@@ -1212,11 +1230,18 @@ class ExtendedCEDICTGR(CEDICTGR, _ExtendedDictionarySupport):
 class _CEDICTDictionaryDefaults():
     @classmethod
     def _setDefaults(cls, options):
+        language = options.get('language', None)
+        if not language: language = DICTIONARY_DEFAULT_LANG[cls.PROVIDES]
+        reading = options.get('reading', None)
+        if not reading: reading = cls.READING
+
         if 'entryFactory' not in options:
             #options['entryFactory'] = HeadwordAlternative()
-            options['entryFactory'] = CEDICTEntry()
-
-        reading = options.get('reading', cls.READING)
+            if language.endswith('Hant'):
+                headword='t'
+            else:
+                headword='s'
+            options['entryFactory'] = CEDICTEntry(headword=headword)
 
         columnFormatStrategies = options.get('columnFormatStrategies', {})
         if 'Reading' not in columnFormatStrategies:
@@ -1300,7 +1325,10 @@ class PseudoDictionary(object):
     character to reading mappings in the absence of real dictionary data.
     """
     # TODO implement limit= for all search routines
-    SUPPORTED_LANG = ['zh-cmn-Hans', 'zh-cmn-Hant', 'zh-yue-Hans',
+    SUPPORTED_LANG = ['zh-cmn', 'zh-yue', 'ko'] # , 'ja'
+    """List of supported CJK languages for pseudo dictionaries."""
+
+    SUPPORTED_FULL_LANG = ['zh-cmn-Hans', 'zh-cmn-Hant', 'zh-yue-Hans',
         'zh-yue-Hant', 'ko'] # , 'ja'
     """List of supported CJK languages for pseudo dictionaries."""
 
@@ -1324,15 +1352,21 @@ class PseudoDictionary(object):
         columnFormatStrategies=None, entryFactory=None, dbConnectInst=None,
         ignoreIllegalSettings=False, **options):
 
-        if language not in self.SUPPORTED_LANG:
-            raise ValueError("Unknown language '%s'" % language)
+        if language not in self.SUPPORTED_FULL_LANG:
+            for lang in self.SUPPORTED_FULL_LANG:
+                if lang.startswith(language):
+                    language = lang
+                    break
+            else:
+                raise ValueError("Unknown language '%s'" % language)
 
         self.language = language
-        self.PROVIDES = 'PSEUDO_%s' % self.language
+        self.PROVIDES = 'PSEUDO_%s' % getLanguagePart(self.language)
         self.locale = self.LANGUAGE_LOCALE_MAP[language]
 
+        languagePart = getLanguagePart(self.language)
         if (reading
-            and reading not in LANGUAGE_COMPATIBLE_MAPPINGS[self.language]):
+            and reading not in LANGUAGE_COMPATIBLE_MAPPINGS[languagePart]):
             if ignoreIllegalSettings:
                 reading = None
             else:

@@ -46,7 +46,7 @@ from eclectusqt import util
 from libeclectus.dictionaryview import DictionaryView
 from libeclectus.util import encodeBase64, decodeBase64, getCJKScriptClass
 from libeclectus.dictionary import (getDictionaryLanguage,
-    LANGUAGE_COMPATIBLE_MAPPINGS)
+    getDictionaryCompatibleLanguages)
 
 class BrowsingHistory(QObject):
     """
@@ -129,11 +129,8 @@ class DictionaryPage(QWebView):
         'CantoneseYale': ki18n('Yale'), 'Hangul': ki18n('Hangul'),
         'Kana': ki18n('Kana')}
 
-    LANGUAGE_NAMES = {'zh-cmn-Hant': ki18n('Mandarin (Traditional)'),
-        'zh-cmn-Hans': ki18n('Mandarin (Simplified)'),
-        'zh-yue-Hant': ki18n('Cantonese (Traditional)'),
-        'zh-yue-Hans': ki18n('Cantonese (Simplified)'), 'ko': ki18n('Korean'),
-        'ja': ki18n('Japanese')}
+    LANGUAGE_NAMES = {'zh-cmn': ki18n('Mandarin'), 'zh-yue': ki18n('Cantonese'),
+        'ko': ki18n('Korean'), 'ja': ki18n('Japanese')}
 
     DICTIONARY_NAMES = {'CEDICT': ki18n('English-Chinese (CEDICT)'),
         'CEDICTGR': ki18n('English-Chinese (CEDICT, GR version)'),
@@ -141,19 +138,15 @@ class DictionaryPage(QWebView):
         'CFDICT': ki18n('French-Chinese (CFDICT)'),
         'EDICT': ki18n('English-Japanese (EDICT)')}
 
-    CHARACTER_DOMAINS = [
-        ('Unicode', ki18n('all characters')),
-        ('GB2312', ki18n(
-            'Simplified Chinese: 6763 characters from standard GB2312')),
-        ('BIG5', ki18n(
-            'Traditional Chinese: 13063 characters from standard BIG5')),
-        ('BIG5HKSCS', ki18n(
-            'Cantonese with traditional characters: 17575 characters from standard BIG5-HKSCS')),
-        ('JISX0208', ki18n(
-            'Japanese: 6356 characters from standard JIS X 0208')),
-        ('JISX0208_0213', ki18n(
-            'Japanese: 9748 characters from standards JIS X 0208/0213')),
-        ]
+    CHARACTER_DOMAINS = {
+        'Unicode': ki18n('&all characters'),
+        'IICore': ki18n('9810 characters (&International ideographic core)'),
+        'GB2312': ki18n('6763 characters (&GB2312)'),
+        'BIG5': ki18n('13063 characters (&BIG5)'),
+        'BIG5HKSCS': ki18n('17575 characters (BIG5-&HKSCS)'),
+        'JISX0208': ki18n('6356 characters (&JIS X 0208)'),
+        'JISX0208_0213': ki18n('9748 characters (JIS &X 0208/0213)'),
+        }
     """Pretty print strings for character domains."""
 
     DEFAULT_HIDDEN_SECTIONS = ['getCharacterWithComponentSection',
@@ -305,6 +298,14 @@ function _go() { }
                 else:
                     entryDict, entryReading = entry.split(':', 1)
                 self.lastReading[entryDict] = entryReading
+
+            lastLanguage = util.readConfigString(self.pluginConfig,
+                "Last languages", '').split(',')
+            self.lastLanguage = {}
+            for entry in lastLanguage:
+                if not entry: continue
+                entryDict, entryLanguage = entry.split(':', 1)
+                self.lastLanguage[entryDict] = entryLanguage
 
         if 'databaseUrl' not in dictionaryViewSettings:
             dictionaryViewSettings['databaseUrl'] = unicode('sqlite:///'
@@ -478,6 +479,18 @@ function _go() { }
         self._findPrevAction = KStandardAction.findPrev(self.slotFindPrev,
             self.actionCollection)
 
+        # character domain chooser
+        self._simpTradChooserAction = KAction(self)
+        self._simpTradChooserAction.setWhatsThis(
+            i18n("Toggle between simplified and traditional characters"))
+        self._simpTradChooserAction.setObjectName("simptradchooser")
+        self.connect(self._simpTradChooserAction, SIGNAL("triggered(bool)"),
+            self.simpTradChanged)
+        self._simpTradChooserAction.setIcon(
+            QIcon(util.getIcon('simplified.png')))
+
+        self.updateSimpTradSelector()
+
         # dictionary chooser action
         self._dictionaryChooserAction = KSelectAction(i18n("&Dictionary"), self)
         self._dictionaryChooserAction.setWhatsThis(i18n("Select a dictionary"))
@@ -498,7 +511,7 @@ function _go() { }
         self.updateReadingSelector()
 
         # character domain chooser
-        self._charDomainChooserAction = KSelectAction(i18n("&Character domain"),
+        self._charDomainChooserAction = KSelectAction(i18n("&Character Domain"),
             self)
         self._charDomainChooserAction.setWhatsThis(
             i18n("Select the character domain to narrow search results"))
@@ -551,6 +564,27 @@ function _go() { }
 
         return action
 
+    def updateSimpTradSelector(self):
+        dictionaryLang = getDictionaryLanguage(self.dictionary)
+
+        if self.language.endswith('Hant'):
+            self._simpTradChooserAction.setText(i18n("Traditional Cha&racters"))
+        else:
+            self._simpTradChooserAction.setText(i18n("Simplified Cha&racters"))
+
+        if dictionaryLang in ('zh-cmn', 'zh-yue'):
+            self._simpTradChooserAction.setEnabled(True)
+            if self.language.endswith('Hant'):
+                self._simpTradChooserAction.setIcon(
+                    QIcon(util.getIcon('traditional.png')))
+            else:
+                self._simpTradChooserAction.setIcon(
+                    QIcon(util.getIcon('simplified.png')))
+        else:
+            self._simpTradChooserAction.setEnabled(False)
+            self._simpTradChooserAction.setIcon(
+                QIcon(util.getIcon('simplified.png')))
+
     def updateDictionarySelector(self):
         dictionaryView = self.renderThread.getObjectInstance(DictionaryView)
 
@@ -565,7 +599,7 @@ function _go() { }
             if dictionary in self.DICTIONARY_NAMES:
                 name = self.DICTIONARY_NAMES[dictionary].toString()
             else:
-                language = getDictionaryLanguage(dictionary)
+                language = getDictionaryLanguage(dictionary, noScript=True)
                 if language in self.LANGUAGE_NAMES:
                     name = self.LANGUAGE_NAMES[language].toString()
                 else:
@@ -578,7 +612,7 @@ function _go() { }
             self._dictionaryChooserAction.setCurrentItem(currentIndex)
 
     def updateReadingSelector(self):
-        self.readingList = LANGUAGE_COMPATIBLE_MAPPINGS.get(self.language, [])
+        self.readingList = getDictionaryCompatibleLanguages(self.dictionary)
 
         readingNames = []
         currentIndex = None
@@ -631,7 +665,8 @@ function _go() { }
         # read existing settings
         if self.renderThread.hasObject(DictionaryView):
             dictionaryView = self.renderThread.getObjectInstance(DictionaryView)
-            for option in 'characterDomain', 'dictionary', 'reading':
+            for option in ('language', 'characterDomain', 'dictionary',
+                'reading'):
                 if option not in options:
                     options[option] = getattr(dictionaryView, option)
 
@@ -639,21 +674,32 @@ function _go() { }
 
         self.reload()
 
+        self.updateSimpTradSelector()
         self.updateDictionarySelector()
         self.updateReadingSelector()
         self.updateCharDomainSelector()
         self.updateSectionSelector()
 
+    def simpTradChanged(self, index):
+        if self.language.endswith('Hant'):
+            language = self.language[:-4] + 'Hans'
+            self._reloadObjects(language=language)
+        elif self.language.endswith('Hans'):
+            language = self.language[:-4] + 'Hant'
+            self._reloadObjects(language=language)
+
+        self.lastLanguage[self.dictionary] = self.language
+
     def dictionaryChanged(self, index):
         dictionary = self.dictionaryList[index]
 
-        if dictionary in self.lastReading:
-            reading = self.lastReading[dictionary]
-        else:
-            reading = None
+        language = self.lastLanguage.get(dictionary, None)
+        reading = self.lastReading.get(dictionary, None)
 
-        self._reloadObjects(reading=reading, dictionary=dictionary)
+        self._reloadObjects(language=language, reading=reading,
+            dictionary=dictionary)
 
+        self.lastLanguage[self.dictionary] = self.language
         self.lastReading[self.dictionary] = self.reading
 
     def readingChanged(self, index):
@@ -768,6 +814,11 @@ function _go() { }
             self._forwardAction)
         return self._forwardAction
 
+    def simpTradChooserAction(self, actionCollection):
+        actionCollection.addAction(self._simpTradChooserAction.objectName(),
+            self._simpTradChooserAction)
+        return self._simpTradChooserAction
+
     def dictionaryChooserAction(self, actionCollection):
         actionCollection.addAction(self._dictionaryChooserAction.objectName(),
             self._dictionaryChooserAction)
@@ -797,7 +848,7 @@ function _go() { }
         for action in ('findAction', 'findNextAction', 'findPrevAction',
             'copyAction', 'selectAllAction', 'backwardAction', 'forwardAction',
             'helpPageAction', 'lookupSelectionAction', 'printAction',
-            'miniModeAction', 'lookupClipboardAction',
+            'miniModeAction', 'lookupClipboardAction', 'simpTradChooserAction',
             'dictionaryChooserAction', 'readingChooserAction',
             'charDomainChooserAction', 'sectionChooserAction'):
             getattr(self, action)(actionCollection)
@@ -1235,6 +1286,12 @@ function _go() { }
             for dictionary, reading in self.lastReading.items():
                 lastReadings.append(':'.join([dictionary, reading]))
             self.pluginConfig.writeEntry("Last readings", lastReadings)
+
+            self.lastLanguage[self.dictionary] = self.language
+            lastLanguage = []
+            for dictionary, language in self.lastLanguage.items():
+                lastLanguage.append(':'.join([dictionary, language]))
+            self.pluginConfig.writeEntry("Last languages", lastLanguage)
 
     def contentRendered(self, id, classObject, method, args, param, content):
         if classObject == DictionaryView \

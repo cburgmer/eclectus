@@ -21,6 +21,7 @@
    <Action name="sectionchooser" />
    <Separator name="separator_0" />
    <Action name="dictchooser" />
+   <Action name="simptradchooser" />
    <Action name="readingchooser" />
    <Action name="chardomainchooser" />
    <Separator name="separator_3" />
